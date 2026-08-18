@@ -1,0 +1,238 @@
+use std::borrow::Cow;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use ratatui::{
+    buffer::Buffer,
+    layout::{Alignment, Rect},
+    style::{palette::tailwind, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Block, BorderType, HighlightSpacing, List, ListItem},
+};
+
+pub fn focus_style() -> Style {
+    Style::new().fg(tailwind::YELLOW.c400)
+}
+
+pub fn unfocused_style() -> Style {
+    Style::new().fg(tailwind::SLATE.c200)
+}
+
+pub fn content_style() -> Style {
+    Style::new().fg(tailwind::SLATE.c200)
+}
+
+pub fn modal_body_style() -> Style {
+    Style::new().fg(tailwind::SLATE.c100)
+}
+
+fn title_style(border_style: Style) -> Style {
+    border_style.add_modifier(Modifier::BOLD)
+}
+
+pub fn titled_block(title: impl Into<String>, border_style: Style) -> Block<'static> {
+    Block::bordered()
+        .title(Span::styled(title.into(), title_style(border_style)))
+        .border_style(border_style)
+}
+
+pub fn titled_block_split(left: Line<'static>, right: Line<'static>, border_style: Style) -> Block<'static> {
+    Block::bordered()
+        .title(left.alignment(Alignment::Left))
+        .title(right.alignment(Alignment::Right))
+        .border_style(border_style)
+}
+
+pub fn modal_block(title: impl Into<String>) -> Block<'static> {
+    let border_style = focus_style();
+    Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(border_style)
+        .style(Style::new().bg(tailwind::SLATE.c900))
+        .title(Span::styled(title.into(), title_style(border_style)))
+        .title_alignment(Alignment::Center)
+}
+
+pub fn selected_style() -> Style {
+    Style::new().bg(tailwind::SLATE.c800).add_modifier(Modifier::BOLD)
+}
+
+pub fn marker_style(selected: bool) -> (&'static str, Style) {
+    if selected {
+        ("▶ ", selected_style())
+    } else {
+        ("  ", content_style())
+    }
+}
+
+pub fn styled_list<'a>(items: Vec<ListItem<'a>>, block: Block<'a>) -> List<'a> {
+    List::new(items)
+        .block(block)
+        .highlight_style(selected_style())
+        .highlight_symbol("▶ ")
+        .highlight_spacing(HighlightSpacing::Always)
+}
+
+pub fn plural(count: usize, suffix: &str) -> &str {
+    if count == 1 {
+        ""
+    } else {
+        suffix
+    }
+}
+
+const SORT_LABEL_WIDTH: usize = 40;
+
+pub fn search_title(
+    title_prefix: &str,
+    searching: bool,
+    query: &str,
+    match_count: usize,
+    border_style: Style,
+) -> Line<'static> {
+    let matches = format!("{match_count} match{}", plural(match_count, "es"));
+
+    let search_segment = if searching {
+        if query.is_empty() {
+            "</> ▏".to_string()
+        } else {
+            format!("</> {query}▏ {matches}")
+        }
+    } else if !query.is_empty() {
+        format!("\"{query}\" · {matches}")
+    } else {
+        "</> search".to_string()
+    };
+
+    Line::styled(format!(" {title_prefix} — {search_segment} "), title_style(border_style))
+}
+
+pub fn sort_title(category_label: &str, sort_label: &str, border_style: Style) -> Line<'static> {
+    let text = format!(" <o> group: {category_label}  <p> sort: {sort_label} ");
+    let fill_len = SORT_LABEL_WIDTH.saturating_sub(text.chars().count());
+    let fill = "─".repeat(fill_len);
+
+    Line::from(vec![Span::styled(text, title_style(border_style)), Span::styled(fill, border_style)])
+}
+
+pub fn dim_area(area: Rect, buf: &mut Buffer) {
+    for y in area.y..area.y.saturating_add(area.height) {
+        for x in area.x..area.x.saturating_add(area.width) {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_fg(tailwind::SLATE.c700);
+                cell.set_bg(tailwind::SLATE.c950);
+            }
+        }
+    }
+}
+
+pub fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
+    let width = width.min(area.width);
+    let height = height.min(area.height);
+    let x = area.x + (area.width.saturating_sub(width)) / 2;
+    let y = area.y + (area.height.saturating_sub(height)) / 2;
+    Rect { x, y, width, height }
+}
+
+pub fn side_by_side_rect(base_width: u16, side_width: u16, height: u16, has_side: bool, area: Rect) -> (Rect, Rect) {
+    let gap: u16 = 2;
+    let total_width = if has_side { base_width.saturating_add(gap).saturating_add(side_width) } else { base_width };
+    let total_width = total_width.min(area.width);
+    let height = height.min(area.height);
+    let x = area.x + (area.width.saturating_sub(total_width)) / 2;
+    let y = area.y + (area.height.saturating_sub(height)) / 2;
+
+    let base_width = base_width.min(total_width);
+    let base = Rect { x, y, width: base_width, height };
+    let side = Rect { x: x + base_width + gap, y, width: side_width.min(total_width.saturating_sub(base_width + gap)), height };
+    (base, side)
+}
+
+const MARQUEE_PAUSE_MS: u128 = 4500;
+const MARQUEE_STEP_MS: u128 = 150;
+const MARQUEE_GAP: &str = "    ";
+
+thread_local! {
+    static MARQUEE_ACTIVE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub fn reset_marquee_activity() {
+    MARQUEE_ACTIVE.with(|c| c.set(false));
+}
+
+pub fn marquee_active() -> bool {
+    MARQUEE_ACTIVE.with(|c| c.get())
+}
+
+pub fn marquee_window(text: &str, visible_width: usize) -> Cow<'_, str> {
+    if visible_width == 0 {
+        return Cow::Borrowed("");
+    }
+
+    if text.len() <= visible_width {
+        return Cow::Borrowed(text);
+    }
+
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= visible_width {
+        return Cow::Borrowed(text);
+    }
+
+    MARQUEE_ACTIVE.with(|c| c.set(true));
+
+    let gap: Vec<char> = MARQUEE_GAP.chars().collect();
+    let loop_len = chars.len() + gap.len();
+
+    let cycle_ms = MARQUEE_PAUSE_MS + loop_len as u128 * MARQUEE_STEP_MS;
+
+    let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
+    let phase = now_ms % cycle_ms;
+
+    let offset = if phase < MARQUEE_PAUSE_MS {
+        0
+    } else {
+        (((phase - MARQUEE_PAUSE_MS) / MARQUEE_STEP_MS) as usize) % loop_len
+    };
+
+    if offset == 0 {
+        let text_width = visible_width.saturating_sub(1);
+        let mut truncated: String = chars[..text_width.min(chars.len())].iter().collect();
+        truncated.push('…');
+        return Cow::Owned(truncated);
+    }
+
+    Cow::Owned((0..visible_width)
+        .map(|i| {
+            let idx = (offset + i) % loop_len;
+            if idx < chars.len() {
+                chars[idx]
+            } else {
+                gap[idx - chars.len()]
+            }
+        })
+        .collect())
+}
+
+pub fn format_duration(d: Duration) -> String {
+    let total = d.as_secs();
+    format!("{:02}:{:02}", total / 60, total % 60)
+}
+
+pub fn format_mtime(mtime_secs: u64) -> String {
+    if mtime_secs == 0 {
+        return "unknown".to_string();
+    }
+
+    let days = (mtime_secs / 86_400) as i64;
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+
+    format!("{y:04}-{m:02}-{d:02}")
+}
