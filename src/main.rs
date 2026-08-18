@@ -4,7 +4,7 @@ use color_eyre::Result;
 
 use lyre_core::{Library, PlaylistStore};
 
-use lyre_tui::{app::App, app_name, config, Backend};
+use lyre_tui::{app::App, config, Backend};
 
 fn main() -> Result<()> {
     color_eyre::install()?;
@@ -14,7 +14,7 @@ fn main() -> Result<()> {
         .map(PathBuf::from)
         .or_else(config::load_last_dir)
         .unwrap_or_else(|| PathBuf::from("."));
-    let cache_path = dir.join(app_name::cache_file_name());
+    let cache_path = config::scan_cache_path(&dir);
 
     let library = match Library::scan(&dir, &cache_path) {
         Ok((library, stats)) => {

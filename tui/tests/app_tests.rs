@@ -4,7 +4,7 @@ use ratatui::{buffer::Buffer, layout::Rect, style::Style, widgets::Widget};
 
 use lyre_tui::{
     app::{App, Category, Panel, PlaylistView, Row, Sort},
-    ui::sort_title,
+    config, ui::sort_title,
     Backend,
 };
 
@@ -400,6 +400,63 @@ fn sort_title_width_is_stable_across_every_category_and_sort_combination() {
             "combination #{i} has a different rendered width than the others -- the header would jump"
         );
     }
+}
+
+#[test]
+fn scan_cache_path_lives_under_the_cache_dir_not_the_library_root() {
+    let home = tempfile::tempdir().unwrap();
+    let library_root = tempfile::tempdir().unwrap();
+
+    let (home_path, root_path) = unsafe {
+        let prev_home = std::env::var("HOME").ok();
+        let prev_xdg = std::env::var("XDG_CACHE_HOME").ok();
+        std::env::set_var("HOME", home.path());
+        std::env::remove_var("XDG_CACHE_HOME");
+
+        let cache_path = config::scan_cache_path(library_root.path());
+
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+        match prev_xdg {
+            Some(v) => std::env::set_var("XDG_CACHE_HOME", v),
+            None => std::env::remove_var("XDG_CACHE_HOME"),
+        }
+
+        (cache_path, library_root.path().to_path_buf())
+    };
+
+    assert!(
+        home_path.starts_with(home.path().join(".cache").join("lyre")),
+        "cache file should live under the XDG cache dir, got {home_path:?}"
+    );
+    assert!(
+        !home_path.starts_with(&root_path),
+        "cache file should not be written inside the library root, got {home_path:?}"
+    );
+}
+
+#[test]
+fn scan_cache_path_is_stable_for_the_same_root() {
+    let library_root = tempfile::tempdir().unwrap();
+
+    let (first, second) = unsafe {
+        let prev_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", tempfile::tempdir().unwrap().path());
+
+        let first = config::scan_cache_path(library_root.path());
+        let second = config::scan_cache_path(library_root.path());
+
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+
+        (first, second)
+    };
+
+    assert_eq!(first, second, "the same library root should always map to the same cache file");
 }
 
 #[test]

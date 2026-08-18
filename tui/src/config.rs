@@ -33,6 +33,38 @@ pub fn data_dir() -> Option<PathBuf> {
     None
 }
 
+/// Base directory for cached data (e.g. the scan cache), following the
+/// XDG Base Directory spec with a `$HOME/.cache/<app>` fallback.
+pub fn cache_dir() -> Option<PathBuf> {
+    let dir_name = app_name::kebab_case();
+    if let Ok(xdg) = std::env::var("XDG_CACHE_HOME")
+        && !xdg.is_empty() {
+            return Some(PathBuf::from(xdg).join(&dir_name));
+        }
+    if let Ok(home) = std::env::var("HOME") {
+        return Some(PathBuf::from(home).join(".cache").join(&dir_name));
+    }
+    None
+}
+
+/// Path to the scan cache file for a given library root. Lives under
+/// `cache_dir()`, keyed by a hash of the canonicalized root so different
+/// library directories don't collide. Falls back to a file inside the
+/// root itself if no cache dir can be determined (no `$HOME`).
+pub fn scan_cache_path(root: &Path) -> PathBuf {
+    use std::hash::{Hash, Hasher};
+
+    let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    canonical.hash(&mut hasher);
+    let filename = format!("{:016x}.json", hasher.finish());
+
+    match cache_dir() {
+        Some(dir) => dir.join(filename),
+        None => root.join(app_name::cache_file_name()),
+    }
+}
+
 pub fn load_last_dir() -> Option<PathBuf> {
     let path = config_path()?;
     let contents = std::fs::read_to_string(path).ok()?;

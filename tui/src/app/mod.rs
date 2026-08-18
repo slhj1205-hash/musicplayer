@@ -147,7 +147,7 @@ impl App {
     }
 
     fn finish_dir_scan(&mut self, new_dir: PathBuf) {
-        let cache_path = new_dir.join(crate::app_name::cache_file_name());
+        let cache_path = crate::config::scan_cache_path(&new_dir);
 
         match Library::scan(&new_dir, &cache_path) {
             Ok((library, stats)) => {
