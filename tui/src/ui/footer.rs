@@ -6,6 +6,7 @@ use ratatui::{
 };
 
 use crate::app::{App, StatusKind};
+use crate::keymap;
 
 pub fn render(app: &App, area: Rect, buf: &mut Buffer) {
     let layout = Layout::vertical([Constraint::Length(1), Constraint::Length(1)]);
@@ -23,8 +24,7 @@ pub fn render(app: &App, area: Rect, buf: &mut Buffer) {
     };
     Paragraph::new(status_text).style(status_style).render(status_area, buf);
 
-    let help = "<↑>/<↓> select · <Enter> play · <Space> pause · <Tab> playlists · <p> playlist actions · <q> quit · <?> for more";
-    Paragraph::new(help)
+    Paragraph::new(keymap::FOOTER_HINT)
         .style(Style::new().fg(tailwind::SLATE.c500))
         .render(help_area, buf);
 }

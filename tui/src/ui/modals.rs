@@ -9,6 +9,7 @@ use ratatui::{
 
 use crate::app::App;
 use crate::app_name::APP_NAME;
+use crate::keymap::{self, Section};
 
 use super::{centered_rect, dim_area, modal_block, modal_body_style};
 
@@ -78,48 +79,27 @@ pub fn render_help_overlay(full_area: Rect, buf: &mut Buffer) {
         ])
     };
 
+    let section_lines = |section: Section| -> Vec<Line<'static>> {
+        keymap::help_rows(section).into_iter().map(|(key, desc)| row(&key, desc)).collect()
+    };
+
     let backend_note = "gstreamer (real audio)".to_string();
 
-    let mut lines = vec![
-        Line::styled("Global", header_style),
-        row("<Tab>", "Switch between Library / Playlists"),
-        row("<↑>/<↓>, <j>/<k>", "Move selection"),
-        row("<Ctrl+d> / <Ctrl+u>", "Jump a page down / up"),
-        row("<g> / <Shift+G>", "Jump to top / bottom"),
-        row("<c>", "Jump to now playing"),
-        row("<Enter>", "Play selected song / open selected playlist"),
-        row("<Space>", "Pause / resume"),
-        row("<n>", "Next track"),
-        row("<1-9> then <n>", "Jump to Nth song in Up Next (<Esc> cancels)"),
-        row("<b>", "Previous track"),
-        row("<a>", "Queue selected song next"),
-        row("<s>", "Shuffle"),
-        row("<u>", "Un-shuffle"),
-        row("<[> / <]>", "Volume down / up"),
-        row("<Shift+A>", "Song actions: add to / create playlist"),
-        row("<d>", "Change directory (used by both Library and Playlists)"),
-        row("<q>, <Esc>", "Quit (with confirmation)"),
-        row("<?>", "Toggle this help"),
-        Line::raw(""),
-        Line::styled("Library", header_style),
-        row("</>", "Search the library (live filter)"),
-        row("<o> / <Shift+O>", "Cycle library category (grouping)"),
-        row("<p> / <Shift+P>", "Cycle library sort (order within group)"),
-        row("<m>", "Cycle playlist display: hidden / count / names"),
-        Line::raw(""),
-        Line::styled("Playlists", header_style),
-        row("</>", "Search by name / within the open playlist (live filter)"),
-        row("<Enter>", "Open playlist / play selected song within it"),
-        row("<Esc>", "Back to playlist browser"),
-        row("<o> / <Shift+O>", "Cycle category within the open playlist"),
-        row("<p> / <Shift+P>", "Cycle sort within the open playlist"),
-        row("<r>", "Remove selected song from playlist (confirm)"),
+    let mut lines = vec![Line::styled("Global", header_style)];
+    lines.extend(section_lines(Section::Global));
+    lines.push(Line::raw(""));
+    lines.push(Line::styled("Library", header_style));
+    lines.extend(section_lines(Section::Library));
+    lines.push(Line::raw(""));
+    lines.push(Line::styled("Playlists", header_style));
+    lines.extend(section_lines(Section::Playlists));
+    lines.extend([
         Line::raw(""),
         Line::styled(format!("  Backend: {backend_note}"), note_style),
         Line::styled("  Mouse: not supported", note_style),
         Line::raw(""),
         Line::from("press any key to close").alignment(Alignment::Center).style(note_style),
-    ];
+    ]);
 
     let height = (lines.len() as u16 + 2).min(full_area.height);
     let popup = centered_rect(58, height, full_area);

@@ -41,7 +41,8 @@ fn render_browsing(app: &mut App, area: Rect, buf: &mut Buffer) {
     let border_style = if searching { focus_style() } else { unfocused_style() };
 
     let block = if empty_store && !searching && query_empty {
-        titled_block(" Playlists — none yet, press <p> on a song to create one ", unfocused_style())
+        let key = crate::keymap::display_for(crate::keymap::Action::OpenSongModal);
+        titled_block(format!(" Playlists — none yet, press {key} on a song to create one "), unfocused_style())
     } else {
         let left_title = search_title("Playlists", searching, &app.playlist_panel.search_query, match_count, border_style);
         titled_block_split(left_title, Line::from(""), border_style)

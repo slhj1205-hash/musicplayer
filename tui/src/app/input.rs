@@ -1,6 +1,8 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 
 use lyre_core::SongId;
+
+use crate::keymap::{self, Action};
 
 use super::navigation::move_wrapping;
 use super::state::{ChooseActionField, Panel, PlaylistView, SidePanel, StatusKind};
@@ -43,92 +45,96 @@ impl App {
             self.pending_number.clear();
         }
 
-        match key.code {
-            KeyCode::Char('q') => self.modal.confirming_quit = true,
-            KeyCode::Esc => {
-                if had_pending_number {
-                    self.set_status("cancelled queue jump", StatusKind::Info);
-                } else if self.panel == Panel::Playlists && matches!(self.playlist_panel.view, PlaylistView::Viewing(_)) {
-                    if self.playlist_panel.search_query.is_empty() {
-                        self.playlist_panel.view = PlaylistView::Browsing;
-                        self.reset_playlist_browse_selection();
-                    } else {
-                        self.playlist_panel.search_query.clear();
-                        self.sync_selection_to_rows();
-                        self.set_status("cleared search", StatusKind::Info);
-                    }
-                } else if self.panel == Panel::Playlists
-                    && self.playlist_panel.view == PlaylistView::Browsing
-                    && !self.playlist_panel.search_query.is_empty()
-                {
-                    self.playlist_panel.search_query.clear();
-                    self.sync_playlist_browse_selection();
-                    self.set_status("cleared search", StatusKind::Info);
-                } else if self.panel == Panel::Library && !self.library_panel.search_query.is_empty() {
-                    self.library_panel.search_query.clear();
-                    self.sync_selection_to_rows();
-                    self.set_status("cleared search", StatusKind::Info);
-                } else {
-                    self.modal.confirming_quit = true;
-                }
-            }
-            KeyCode::Char('?') => self.modal.showing_help = true,
-            KeyCode::Tab => self.toggle_panel(),
-            KeyCode::Char('j') | KeyCode::Down => self.move_selection(1),
-            KeyCode::Char('k') | KeyCode::Up => self.move_selection(-1),
-            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.jump_page(true),
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => self.jump_page(false),
-            KeyCode::Char('g') | KeyCode::Home => self.select_first_row(),
-            KeyCode::Char('G') | KeyCode::End => self.select_last_row(),
-            KeyCode::Char('c') => self.jump_to_current(),
-            KeyCode::Enter => self.activate_selected(),
-            KeyCode::Char(' ') => {
-                if let Err(e) = self.player.toggle() {
-                    self.set_status(format!("playback error: {e}"), StatusKind::Error);
-                }
-            }
-            KeyCode::Char('n') => {
-                if self.pending_number.is_empty() {
-                    self.advance();
-                } else {
-                    self.jump_to_upcoming();
-                }
-            }
-            KeyCode::Char(c) if c.is_ascii_digit() => {
+        if is_digit {
+            if let KeyCode::Char(c) = key.code {
                 self.pending_number.push(c);
                 self.set_status(
                     format!("jump to Up Next #{} (press <n>, <Esc> to cancel)", self.pending_number),
                     StatusKind::Info,
                 );
             }
-            KeyCode::Char('b') => self.go_back(),
-            KeyCode::Char('a') => self.queue_selected_next(),
-            KeyCode::Char('A') => self.open_song_modal(),
-            KeyCode::Char('r') => self.open_remove_confirm(),
-            KeyCode::Char('d') => {
+            return;
+        }
+
+        if key.code == KeyCode::Esc {
+            if had_pending_number {
+                self.set_status("cancelled queue jump", StatusKind::Info);
+            } else if self.panel == Panel::Playlists && matches!(self.playlist_panel.view, PlaylistView::Viewing(_)) {
+                if self.playlist_panel.search_query.is_empty() {
+                    self.playlist_panel.view = PlaylistView::Browsing;
+                    self.reset_playlist_browse_selection();
+                } else {
+                    self.playlist_panel.search_query.clear();
+                    self.sync_selection_to_rows();
+                    self.set_status("cleared search", StatusKind::Info);
+                }
+            } else if self.panel == Panel::Playlists
+                && self.playlist_panel.view == PlaylistView::Browsing
+                && !self.playlist_panel.search_query.is_empty()
+            {
+                self.playlist_panel.search_query.clear();
+                self.sync_playlist_browse_selection();
+                self.set_status("cleared search", StatusKind::Info);
+            } else if self.panel == Panel::Library && !self.library_panel.search_query.is_empty() {
+                self.library_panel.search_query.clear();
+                self.sync_selection_to_rows();
+                self.set_status("cleared search", StatusKind::Info);
+            } else {
+                self.modal.confirming_quit = true;
+            }
+            return;
+        }
+
+        match keymap::lookup(key) {
+            Some(Action::TogglePanel) => self.toggle_panel(),
+            Some(Action::MoveDown) => self.move_selection(1),
+            Some(Action::MoveUp) => self.move_selection(-1),
+            Some(Action::PageDown) => self.jump_page(true),
+            Some(Action::PageUp) => self.jump_page(false),
+            Some(Action::JumpTop) => self.select_first_row(),
+            Some(Action::JumpBottom) => self.select_last_row(),
+            Some(Action::JumpToCurrent) => self.jump_to_current(),
+            Some(Action::Activate) => self.activate_selected(),
+            Some(Action::TogglePlayback) => {
+                if let Err(e) = self.player.toggle() {
+                    self.set_status(format!("playback error: {e}"), StatusKind::Error);
+                }
+            }
+            Some(Action::NextOrJump) => {
+                if self.pending_number.is_empty() {
+                    self.advance();
+                } else {
+                    self.jump_to_upcoming();
+                }
+            }
+            Some(Action::PrevTrack) => self.go_back(),
+            Some(Action::QueueNext) => self.queue_selected_next(),
+            Some(Action::OpenSongModal) => self.open_song_modal(),
+            Some(Action::RemoveFromPlaylist) => self.open_remove_confirm(),
+            Some(Action::ChangeDirectory) => {
                 self.dir.dir_input = self.library.root().display().to_string();
                 self.dir.editing_dir = true;
             }
-            KeyCode::Char('/') => match self.panel {
+            Some(Action::ToggleSearch) => match self.panel {
                 Panel::Library => self.library_panel.searching = true,
                 Panel::Playlists => self.playlist_panel.searching = true,
             },
-            KeyCode::Char('o') => self.cycle_category(true),
-            KeyCode::Char('O') => self.cycle_category(false),
-            KeyCode::Char('p') => self.cycle_sort(true),
-            KeyCode::Char('P') => self.cycle_sort(false),
-            KeyCode::Char('m') => self.cycle_library_playlist_mode(),
-            KeyCode::Char('s') => {
+            Some(Action::CycleCategory(forward)) => self.cycle_category(forward),
+            Some(Action::CycleSort(forward)) => self.cycle_sort(forward),
+            Some(Action::CyclePlaylistDisplayMode) => self.cycle_library_playlist_mode(),
+            Some(Action::Shuffle) => {
                 self.queue.shuffle();
                 self.set_status("shuffled", StatusKind::Info);
             }
-            KeyCode::Char('u') => {
+            Some(Action::Unshuffle) => {
                 self.queue.unshuffle();
                 self.set_status("restored original order", StatusKind::Info);
             }
-            KeyCode::Char(']') | KeyCode::Char('+') => self.player.adjust_volume(0.05),
-            KeyCode::Char('[') | KeyCode::Char('-') => self.player.adjust_volume(-0.05),
-            _ => {}
+            Some(Action::VolumeUp) => self.player.adjust_volume(0.05),
+            Some(Action::VolumeDown) => self.player.adjust_volume(-0.05),
+            Some(Action::Quit) => self.modal.confirming_quit = true,
+            Some(Action::ToggleHelp) => self.modal.showing_help = true,
+            Some(Action::None) | None => {}
         }
     }
 

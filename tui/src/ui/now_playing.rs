@@ -36,7 +36,10 @@ pub fn render(app: &App, area: Rect, buf: &mut Buffer) {
             Line::raw(marquee_window(song.artist(), inner_width).into_owned()),
             Line::raw(marquee_window(song.album(), inner_width).into_owned()),
         ]),
-        None => Text::from("Nothing playing — select a song and press <Enter>"),
+        None => Text::from(format!(
+            "Nothing playing — select a song and press {}",
+            crate::keymap::display_for(crate::keymap::Action::Activate)
+        )),
     };
     Paragraph::new(info_text)
         .style(content_style())

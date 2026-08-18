@@ -65,9 +65,9 @@ impl Widget for &mut App {
 
 fn render_dir_input(app: &App, area: Rect, buf: &mut Buffer) {
     let title = if app.dir.editing_dir {
-        " Directory (<Enter> to load, <Esc> to cancel) "
+        " Directory (<Enter> to load, <Esc> to cancel) ".to_string()
     } else {
-        " Directory <d> "
+        format!(" Directory {} ", crate::keymap::display_for(crate::keymap::Action::ChangeDirectory))
     };
     let border_style = if app.dir.editing_dir { focus_style() } else { unfocused_style() };
 
