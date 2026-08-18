@@ -80,7 +80,12 @@ pub fn plural(count: usize, suffix: &str) -> &str {
     }
 }
 
-const SORT_LABEL_WIDTH: usize = 40;
+fn sort_label_width() -> usize {
+    let fixed = format!(" <o> group: {}  <p> sort: {} ", "", "").chars().count();
+    let max_category = crate::app::Category::ALL.iter().map(|c| c.label().chars().count()).max().unwrap_or(0);
+    let max_sort = crate::app::Sort::ALL.iter().map(|s| s.label().chars().count()).max().unwrap_or(0);
+    fixed + max_category + max_sort
+}
 
 pub fn search_title(
     title_prefix: &str,
@@ -108,7 +113,7 @@ pub fn search_title(
 
 pub fn sort_title(category_label: &str, sort_label: &str, border_style: Style) -> Line<'static> {
     let text = format!(" <o> group: {category_label}  <p> sort: {sort_label} ");
-    let fill_len = SORT_LABEL_WIDTH.saturating_sub(text.chars().count());
+    let fill_len = sort_label_width().saturating_sub(text.chars().count());
     let fill = "─".repeat(fill_len);
 
     Line::from(vec![Span::styled(text, title_style(border_style)), Span::styled(fill, border_style)])

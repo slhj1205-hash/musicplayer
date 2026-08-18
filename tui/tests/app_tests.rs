@@ -1,9 +1,10 @@
 use crossterm::event::{KeyCode, KeyEvent};
 use lyre_core::{Library, PlaylistStore};
-use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
+use ratatui::{buffer::Buffer, layout::Rect, style::Style, widgets::Widget};
 
 use lyre_tui::{
     app::{App, Category, Panel, PlaylistView, Row, Sort},
+    ui::sort_title,
     Backend,
 };
 
@@ -379,6 +380,26 @@ fn a_rendered_frame_shows_the_selected_song_and_panel_title() {
     let text = buffer_text(&buf);
     assert!(text.contains("Anchor"), "the first song should be visible:\n{text}");
     assert!(text.contains("Library"));
+}
+
+#[test]
+fn sort_title_width_is_stable_across_every_category_and_sort_combination() {
+    let widths: Vec<usize> = Category::ALL
+        .iter()
+        .flat_map(|category| {
+            Sort::ALL.iter().map(|sort| {
+                sort_title(category.label(), sort.label(), Style::default()).width()
+            })
+        })
+        .collect();
+
+    let first = widths[0];
+    for (i, width) in widths.iter().enumerate() {
+        assert_eq!(
+            *width, first,
+            "combination #{i} has a different rendered width than the others -- the header would jump"
+        );
+    }
 }
 
 #[test]

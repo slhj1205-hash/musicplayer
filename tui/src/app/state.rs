@@ -55,6 +55,8 @@ pub enum Category {
 }
 
 impl Category {
+    pub const ALL: &'static [Category] = &[Category::None, Category::Artist, Category::Path];
+
     pub fn label(&self) -> &'static str {
         match self {
             Category::None => "none",
@@ -64,19 +66,11 @@ impl Category {
     }
 
     pub fn next(self) -> Category {
-        match self {
-            Category::None => Category::Artist,
-            Category::Artist => Category::Path,
-            Category::Path => Category::None,
-        }
+        cycle(Self::ALL, self, 1)
     }
 
     pub fn prev(self) -> Category {
-        match self {
-            Category::None => Category::Path,
-            Category::Artist => Category::None,
-            Category::Path => Category::Artist,
-        }
+        cycle(Self::ALL, self, -1)
     }
 }
 
@@ -92,6 +86,8 @@ pub enum Sort {
 }
 
 impl Sort {
+    pub const ALL: &'static [Sort] = &[Sort::Title, Sort::Duration, Sort::Artist, Sort::Path, Sort::DateModified];
+
     pub fn label(&self) -> &'static str {
         match self {
             Sort::Title => "title",
@@ -103,24 +99,18 @@ impl Sort {
     }
 
     pub fn next(self) -> Sort {
-        match self {
-            Sort::Title => Sort::Duration,
-            Sort::Duration => Sort::Artist,
-            Sort::Artist => Sort::Path,
-            Sort::Path => Sort::DateModified,
-            Sort::DateModified => Sort::Title,
-        }
+        cycle(Self::ALL, self, 1)
     }
 
     pub fn prev(self) -> Sort {
-        match self {
-            Sort::Title => Sort::DateModified,
-            Sort::Duration => Sort::Title,
-            Sort::Artist => Sort::Duration,
-            Sort::Path => Sort::Artist,
-            Sort::DateModified => Sort::Path,
-        }
+        cycle(Self::ALL, self, -1)
     }
+}
+
+fn cycle<T: Copy + PartialEq>(all: &[T], current: T, delta: isize) -> T {
+    let len = all.len() as isize;
+    let idx = all.iter().position(|x| *x == current).unwrap_or(0) as isize;
+    all[(idx + delta).rem_euclid(len) as usize]
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
