@@ -31,9 +31,7 @@ fn main() -> Result<()> {
 
     config::save_last_dir(library.root());
 
-    let playlists_dir = config::data_dir()
-        .map(|dir| dir.join("playlists"))
-        .unwrap_or_else(|| library.root().join("playlists"));
+    let playlists_dir = config::playlists_path();
     let (playlists, prune_stats) = PlaylistStore::load(playlists_dir, &library);
     if prune_stats.songs_removed > 0 {
         eprintln!(

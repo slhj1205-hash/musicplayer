@@ -585,6 +585,65 @@ fn scan_cache_path_is_stable_for_the_same_root() {
 }
 
 #[test]
+fn playlists_path_lives_under_the_data_dir_regardless_of_library_root() {
+    let home = tempfile::tempdir().unwrap();
+
+    let path = unsafe {
+        let prev_home = std::env::var("HOME").ok();
+        let prev_xdg = std::env::var("XDG_DATA_HOME").ok();
+        std::env::set_var("HOME", home.path());
+        std::env::remove_var("XDG_DATA_HOME");
+
+        let path = config::playlists_path();
+
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+        match prev_xdg {
+            Some(v) => std::env::set_var("XDG_DATA_HOME", v),
+            None => std::env::remove_var("XDG_DATA_HOME"),
+        }
+
+        path
+    };
+
+    assert!(
+        path.starts_with(home.path().join(".local").join("share").join("lyre")),
+        "playlists file should live under the XDG data dir, got {path:?}"
+    );
+}
+
+#[test]
+fn playlists_path_does_not_depend_on_which_library_directory_is_open() {
+    let home = tempfile::tempdir().unwrap();
+
+    let (from_one_root, from_another_root) = unsafe {
+        let prev_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", home.path());
+
+        // playlists_path takes no library root at all -- calling it while "in" two
+        // different library directories must resolve to the exact same file, so
+        // switching directories can never silently point at a different playlists
+        // file than the one the app started with.
+        let from_one_root = config::playlists_path();
+        let from_another_root = config::playlists_path();
+
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+
+        (from_one_root, from_another_root)
+    };
+
+    assert_eq!(
+        from_one_root, from_another_root,
+        "there must be exactly one playlists file, independent of the current library root"
+    );
+}
+
+#[test]
 fn scrolling_to_the_end_brings_the_last_song_into_view() {
     let mut h = harness();
     let short = Rect::new(0, 0, 120, 12);

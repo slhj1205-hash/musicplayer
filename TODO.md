@@ -8,6 +8,35 @@ errors are modeled consistently with `thiserror`. Findings below, worst first.
 
 ## Fixed already
 
+- [x] **Playlists load from two different paths.** `src/main.rs:34-37` loaded
+  playlists from `config::data_dir()` (XDG data dir, e.g.
+  `~/.local/share/lyre/playlists`) on startup, with a fallback to
+  `library.root().join("playlists")` if no data dir was available. But
+  `finish_dir_scan` in `tui/src/app/mod.rs:165-166` (triggered by `<d>` to
+  change directory) always loaded/saved from `library.root().join("playlists")`,
+  ignoring `data_dir()` entirely. Fixed by adding `config::playlists_path()` --
+  a single, library-root-independent function -- and switching both call sites
+  (`main.rs` and `finish_dir_scan`) to use it. Playlists now live in exactly one
+  place (the XDG data dir, with a `.lyre-playlists` dotfile-in-cwd fallback only
+  if `$HOME` is unset) regardless of which library directory is open or how many
+  times it's switched.
+
+  Added `playlists_path_lives_under_the_data_dir_regardless_of_library_root` and
+  `playlists_path_does_not_depend_on_which_library_directory_is_open` to
+  `tui/tests/app_tests.rs`, mirroring the existing `scan_cache_path_*` test
+  pattern. **Caveat:** these tests cover `config::playlists_path()` itself, not
+  `finish_dir_scan`. I confirmed this by reverting just the `finish_dir_scan`
+  call site back to the old buggy path and re-running the suite -- it still
+  passed, i.e. the tests do not catch a regression there. `finish_dir_scan` is
+  only reachable through the real event loop (`App::run`, which needs a live
+  terminal), and `CLAUDE.md` rules out `#[cfg(test)]` unit tests inside `src/`
+  as the workaround. So the regression-proofing here is structural rather than
+  test-enforced: both call sites now invoke the identical zero-argument
+  `config::playlists_path()`, which is a much smaller, more obviously-matching
+  surface for a reviewer to check than the two differently-shaped path
+  expressions that caused the original bug. Full workspace build + clippy +
+  test suite (89 tests) verified green after the change.
+
 - [x] **Panic risk in `Metadata::write`** (`core/src/song.rs`). The code assumed
   that if a tag didn't exist, inserting one and then calling `first_tag_mut()`
   would always succeed, backed by `.expect("inserted a tag above if none
@@ -19,23 +48,6 @@ errors are modeled consistently with `thiserror`. Findings below, worst first.
   and the full suite (87 tests) still passes. No regression test added — would
   need a fixture format with zero tag support, which isn't practical to
   synthesize.
-
-## Real bugs
-
-- [ ] **Playlists load from two different paths.** `src/main.rs:34-37` loads
-  playlists from `config::data_dir()` (XDG data dir, e.g.
-  `~/.local/share/lyre/playlists`) on startup, with a fallback to
-  `library.root().join("playlists")` if no data dir is available. But
-  `finish_dir_scan` in `tui/src/app/mod.rs:165-166` (triggered by `<d>` to
-  change directory) always loads/saves from `library.root().join("playlists")`,
-  ignoring `data_dir()` entirely. Concretely: start the app normally, playlists
-  come from the XDG dir. Press `<d>` and re-enter the *same* directory, and the
-  app silently switches to a different (likely empty) playlists file — any
-  playlists created from then on save somewhere different from where they
-  started. Looks like `finish_dir_scan` predates the XDG data-dir fallback added
-  to `main.rs` and was never updated to match. Fix: factor the
-  `data_dir()`-aware path resolution out of `main.rs` into `config.rs` and use it
-  in both places.
 
 ## Design risk worth discussing
 
@@ -76,3 +88,4 @@ errors are modeled consistently with `thiserror`. Findings below, worst first.
   finish wiring it up.
 - [ ] Pre-existing `clippy::collapsible_if` in `tui/src/keymap.rs:151`
   (unrelated to anything above). Cosmetic only.
+

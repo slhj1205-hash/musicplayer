@@ -165,7 +165,10 @@ impl Metadata {
         }
         let tag = match tagged_file.tag_mut(tag_type) {
             Some(tag) => tag,
-            None => tagged_file.first_tag_mut().expect("inserted a tag above if none existed"),
+            None => match tagged_file.first_tag_mut() {
+                Some(tag) => tag,
+                None => return Err(Error::Unwritable { path: path.to_path_buf() }),
+            },
         };
 
         set_text(tag, edits.title.trim(), Tag::set_title, Tag::remove_title);
@@ -483,4 +486,6 @@ pub enum Error {
     InvalidTrack(String),
     #[error("invalid date \"{0}\" (try a year like 2024 or a full date like 2024-01-31)")]
     InvalidDate(String),
+    #[error("{} does not support any tag format lyre can write to", path.display())]
+    Unwritable { path: PathBuf },
 }

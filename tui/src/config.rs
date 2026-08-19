@@ -65,6 +65,19 @@ pub fn scan_cache_path(root: &Path) -> PathBuf {
     }
 }
 
+/// Path to the playlists file, following the XDG Base Directory spec via
+/// `data_dir()`. Not tied to any particular library -- there is exactly one
+/// playlists file regardless of which directory is currently open, so every
+/// call site must resolve it the same way rather than falling back to a
+/// path derived from the library root. Falls back to a dotfile in the
+/// current directory if no data dir can be determined (no `$HOME`).
+pub fn playlists_path() -> PathBuf {
+    match data_dir() {
+        Some(dir) => dir.join("playlists"),
+        None => PathBuf::from(format!(".{}-playlists", app_name::kebab_case())),
+    }
+}
+
 pub fn load_last_dir() -> Option<PathBuf> {
     let path = config_path()?;
     let contents = std::fs::read_to_string(path).ok()?;

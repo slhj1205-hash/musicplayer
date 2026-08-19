@@ -165,8 +165,7 @@ impl App {
                     self.library_panel.list_state.select(Some(0));
                 }
 
-                let (playlists, prune_stats) =
-                    PlaylistStore::load(library.root().join("playlists"), &library);
+                let (playlists, prune_stats) = PlaylistStore::load(crate::config::playlists_path(), &library);
                 self.playlists.flush();
                 self.playlists = playlists;
                 self.playlist_panel.view = PlaylistView::Browsing;
