@@ -2,6 +2,8 @@ use ratatui::widgets::ListState;
 
 use lyre_core::{PlaylistId, SongId};
 
+use crate::keymap::Direction;
+
 use super::state::{Panel, PlaylistView, QueueSource, Row, StatusKind};
 use super::App;
 
@@ -73,9 +75,9 @@ impl App {
         self.playlist_panel.list_state.select(Some(idx as usize));
     }
 
-    pub(super) fn jump_page(&mut self, forward: bool) {
+    pub(super) fn jump_page(&mut self, direction: Direction) {
         if self.panel == Panel::Playlists && self.playlist_panel.view == PlaylistView::Browsing {
-            self.jump_playlist_browse_page(forward);
+            self.jump_playlist_browse_page(direction);
             return;
         }
 
@@ -90,7 +92,7 @@ impl App {
         let (new_offset, target) = {
             let rows = self.rows_slice();
             let is_selectable = |i: usize| matches!(rows[i], Row::Song(_, _));
-            compute_jump(offset, len, height, forward, is_selectable)
+            compute_jump(offset, len, height, direction, is_selectable)
         };
 
         let state = self.active_list_state_mut();
@@ -98,7 +100,7 @@ impl App {
         state.select(Some(target));
     }
 
-    fn jump_playlist_browse_page(&mut self, forward: bool) {
+    fn jump_playlist_browse_page(&mut self, direction: Direction) {
         let len = self.visible_playlist_ids().len();
         if len == 0 {
             self.playlist_panel.list_state.select(None);
@@ -107,7 +109,7 @@ impl App {
         let height = self.playlist_panel.page_height;
         let offset = self.playlist_panel.list_state.offset();
 
-        let (new_offset, target) = compute_jump(offset, len, height, forward, |_| true);
+        let (new_offset, target) = compute_jump(offset, len, height, direction, |_| true);
 
         *self.playlist_panel.list_state.offset_mut() = new_offset;
         self.playlist_panel.list_state.select(Some(target));
@@ -215,18 +217,24 @@ impl App {
         self.active_list_state_mut().select(Some(landing));
     }
 
-    pub(super) fn cycle_category(&mut self, forward: bool) {
+    pub(super) fn cycle_category(&mut self, direction: Direction) {
         match self.panel {
             Panel::Library => {
                 self.library_panel.category =
-                    if forward { self.library_panel.category.next() } else { self.library_panel.category.prev() };
+                    match direction {
+                        Direction::Forwards => self.library_panel.category.next(),
+                        Direction::Backwards => self.library_panel.category.prev(),
+                    };
                 self.sync_selection_to_rows();
                 self.set_status(format!("grouped by {}", self.library_panel.category.label()), StatusKind::Info);
             }
             Panel::Playlists => {
                 if matches!(self.playlist_panel.view, PlaylistView::Viewing(_)) {
                     self.playlist_panel.category =
-                        if forward { self.playlist_panel.category.next() } else { self.playlist_panel.category.prev() };
+                        match direction {
+                            Direction::Forwards => self.playlist_panel.category.next(),
+                            Direction::Backwards => self.playlist_panel.category.prev(),
+                        };
                     self.sync_selection_to_rows();
                     self.set_status(
                         format!("grouped by {}", self.playlist_panel.category.label()),
@@ -237,18 +245,24 @@ impl App {
         }
     }
 
-    pub(super) fn cycle_sort(&mut self, forward: bool) {
+    pub(super) fn cycle_sort(&mut self, direction: Direction) {
         match self.panel {
             Panel::Library => {
                 self.library_panel.sort =
-                    if forward { self.library_panel.sort.next() } else { self.library_panel.sort.prev() };
+                    match direction {
+                        Direction::Forwards => self.library_panel.sort.next(),
+                        Direction::Backwards => self.library_panel.sort.prev(),
+                    };
                 self.sync_selection_to_rows();
                 self.set_status(format!("sorted by {}", self.library_panel.sort.label()), StatusKind::Info);
             }
             Panel::Playlists => {
                 if matches!(self.playlist_panel.view, PlaylistView::Viewing(_)) {
                     self.playlist_panel.sort =
-                        if forward { self.playlist_panel.sort.next() } else { self.playlist_panel.sort.prev() };
+                        match direction {
+                            Direction::Forwards => self.playlist_panel.sort.next(),
+                            Direction::Backwards => self.playlist_panel.sort.prev(),
+                        };
                     self.sync_selection_to_rows();
                     self.set_status(format!("sorted by {}", self.playlist_panel.sort.label()), StatusKind::Info);
                 }
@@ -299,31 +313,35 @@ pub(super) fn move_wrapping(state: &mut ListState, len: usize, delta: isize) {
     state.select(Some(idx as usize));
 }
 
-fn compute_jump(offset: usize, len: usize, height: usize, forward: bool, is_selectable: impl Fn(usize) -> bool) -> (usize, usize) {
+fn compute_jump(offset: usize, len: usize, height: usize, direction: Direction, is_selectable: impl Fn(usize) -> bool) -> (usize, usize) {
     let height = height.max(1);
     let offset = offset.min(len.saturating_sub(1));
 
-    if forward {
-        let last_visible = (offset + height - 1).min(len - 1);
-        if last_visible > offset {
+    match direction {
+        Direction::Forwards => {
+            let last_visible = (offset + height - 1).min(len - 1);
+            if last_visible > offset {
 
-            let mid = (last_visible + height / 2).min(len - 1);
-            let target = nearest_selectable(mid, len, &is_selectable).unwrap_or(mid);
-            (last_visible, target)
-        } else {
+                let mid = (last_visible + height / 2).min(len - 1);
+                let target = nearest_selectable(mid, len, &is_selectable).unwrap_or(mid);
+                (last_visible, target)
+            } else {
 
-            let target = last_selectable(len, &is_selectable).unwrap_or(len - 1);
-            (len.saturating_sub(height), target)
-        }
-    } else if offset > 0 {
-        let new_offset = offset.saturating_sub(height - 1);
-        let mid = (new_offset + height / 2).min(len - 1);
-        let target = nearest_selectable(mid, len, &is_selectable).unwrap_or(mid);
-        (new_offset, target)
-    } else {
-
-        let target = first_selectable(len, &is_selectable).unwrap_or(0);
-        (0, target)
+                let target = last_selectable(len, &is_selectable).unwrap_or(len - 1);
+                (len.saturating_sub(height), target)
+            }
+        },
+        Direction::Backwards => {
+            if offset > 0 {
+                let new_offset = offset.saturating_sub(height - 1);
+                let mid = (new_offset + height / 2).min(len - 1);
+                let target = nearest_selectable(mid, len, &is_selectable).unwrap_or(mid);
+                (new_offset, target)
+            } else {
+                let target = first_selectable(len, &is_selectable).unwrap_or(0);
+                (0, target)
+            }
+        },
     }
 }
 

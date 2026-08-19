@@ -20,8 +20,8 @@ pub enum Action {
     RemoveFromPlaylist,
     ChangeDirectory,
     ToggleSearch,
-    CycleCategory(bool),
-    CycleSort(bool),
+    CycleCategory(Direction),
+    CycleSort(Direction),
     CyclePlaylistDisplayMode,
     Shuffle,
     Unshuffle,
@@ -37,6 +37,12 @@ pub enum Section {
     Global,
     Library,
     Playlists,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Direction {
+    Forwards,
+    Backwards,
 }
 
 pub struct Binding {
@@ -102,13 +108,13 @@ pub const BINDINGS: &[Binding] = &[
         display: "<?>", desc: "Toggle this help", section: Section::Global, dispatch: true },
     Binding { keys: &[(KeyCode::Char('/'), NONE)], action: Action::ToggleSearch,
         display: "</>", desc: "Search the library (live filter)", section: Section::Library, dispatch: true },
-    Binding { keys: &[(KeyCode::Char('o'), NONE)], action: Action::CycleCategory(true),
+    Binding { keys: &[(KeyCode::Char('o'), NONE)], action: Action::CycleCategory(Direction::Forwards),
         display: "<o>", desc: "Cycle library category (grouping)", section: Section::Library, dispatch: true },
-    Binding { keys: &[(KeyCode::Char('O'), NONE)], action: Action::CycleCategory(false),
+    Binding { keys: &[(KeyCode::Char('O'), NONE)], action: Action::CycleCategory(Direction::Backwards),
         display: "<Shift+O>", desc: "Cycle library category (grouping)", section: Section::Library, dispatch: true },
-    Binding { keys: &[(KeyCode::Char('p'), NONE)], action: Action::CycleSort(true),
+    Binding { keys: &[(KeyCode::Char('p'), NONE)], action: Action::CycleSort(Direction::Forwards),
         display: "<p>", desc: "Cycle library sort (order within group)", section: Section::Library, dispatch: true },
-    Binding { keys: &[(KeyCode::Char('P'), NONE)], action: Action::CycleSort(false),
+    Binding { keys: &[(KeyCode::Char('P'), NONE)], action: Action::CycleSort(Direction::Backwards),
         display: "<Shift+P>", desc: "Cycle library sort (order within group)", section: Section::Library, dispatch: true },
     Binding { keys: &[(KeyCode::Char('m'), NONE)], action: Action::CyclePlaylistDisplayMode,
         display: "<m>", desc: "Cycle playlist display: hidden / count / names", section: Section::Library, dispatch: true },

@@ -67,13 +67,17 @@ errors are modeled consistently with `thiserror`. Findings below, worst first.
 
 ## Cleanup, not urgent
 
-- [ ] **Booleans instead of enums for direction.** `Action::CycleCategory(bool)`,
+- [x] **Booleans instead of enums for direction.** `Action::CycleCategory(bool)`,
   `Action::CycleSort(bool)` (`tui/src/keymap.rs`), `jump_page(forward: bool)`,
   `compute_jump(..., forward: bool, ...)` (`tui/src/app/navigation.rs`). Call
   sites like `Action::CycleCategory(true)` / `Action::CycleCategory(false)` read
   fine once you know the convention but require checking the definition to
   confirm `true` means forward. A small `enum Direction { Forward, Backward }`
   would make every call site self-documenting.
+
+  **Fixed:** Replaced all `bool` direction parameters with `enum Direction`.
+  The `compute_jump` function now takes `direction: Direction` and uses a
+  `match` to dispatch `Forwards` vs `Backwards` behavior.
 - [ ] **`render_song_list_panel` takes 13 parameters**
   (`tui/src/ui/rows.rs:217`), with `#[allow(clippy::too_many_arguments)]`
   explicitly suppressing the lint. Worth collapsing the panel-specific

@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use lyre_core::SongId;
 
-use crate::keymap::{self, Action};
+use crate::keymap::{self, Action, Direction};
 
 use super::navigation::move_wrapping;
 use super::state::{ChooseActionField, Panel, PlaylistView, SidePanel, StatusKind};
@@ -93,8 +93,8 @@ impl App {
             Some(Action::TogglePanel) => self.toggle_panel(),
             Some(Action::MoveDown) => self.move_selection(1),
             Some(Action::MoveUp) => self.move_selection(-1),
-            Some(Action::PageDown) => self.jump_page(true),
-            Some(Action::PageUp) => self.jump_page(false),
+            Some(Action::PageDown) => self.jump_page(Direction::Forwards),
+            Some(Action::PageUp) => self.jump_page(Direction::Backwards),
             Some(Action::JumpTop) => self.select_first_row(),
             Some(Action::JumpBottom) => self.select_last_row(),
             Some(Action::JumpToCurrent) => self.jump_to_current(),
@@ -124,8 +124,8 @@ impl App {
                 Panel::Library => self.library_panel.searching = true,
                 Panel::Playlists => self.playlist_panel.searching = true,
             },
-            Some(Action::CycleCategory(forward)) => self.cycle_category(forward),
-            Some(Action::CycleSort(forward)) => self.cycle_sort(forward),
+            Some(Action::CycleCategory(direction)) => self.cycle_category(direction),
+            Some(Action::CycleSort(direction)) => self.cycle_sort(direction),
             Some(Action::CyclePlaylistDisplayMode) => self.cycle_library_playlist_mode(),
             Some(Action::Shuffle) => {
                 self.queue.shuffle();
