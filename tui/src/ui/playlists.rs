@@ -14,7 +14,7 @@ use crate::{
 
 use super::{
     focus_style, label_for, plural, render_no_matches, render_song_list_panel, search_title, styled_list,
-    titled_block, titled_block_split, unfocused_style, viewport,
+    titled_block, titled_block_split, unfocused_style, viewport, PanelHeight,
 };
 
 fn playlist_name_style() -> Style {
@@ -88,7 +88,7 @@ fn render_viewing(app: &mut App, id: PlaylistId, area: Rect, buf: &mut Buffer) {
 
     let category = app.playlist_panel.category;
     let sort = app.playlist_panel.sort;
-    app.playlist_panel.page_height = render_song_list_panel(
+    let PanelHeight(height) = render_song_list_panel(
         area,
         buf,
         &mut app.playlist_panel.list_state,
@@ -103,4 +103,5 @@ fn render_viewing(app: &mut App, id: PlaylistId, area: Rect, buf: &mut Buffer) {
         &app.playlist_panel.search_query,
         None,
     );
+    app.playlist_panel.page_height = height;
 }

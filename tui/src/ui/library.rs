@@ -3,7 +3,7 @@ use ratatui::{buffer::Buffer, layout::Rect};
 
 use crate::app::App;
 
-use super::{label_for, render_song_list_panel};
+use super::{label_for, render_song_list_panel, PanelHeight};
 
 pub fn render(app: &mut App, area: Rect, buf: &mut Buffer) {
     let current = app.queue.current_id();
@@ -24,7 +24,7 @@ pub fn render(app: &mut App, area: Rect, buf: &mut Buffer) {
             .collect()
     };
 
-    app.library_panel.page_height = render_song_list_panel(
+    let PanelHeight(height) = render_song_list_panel(
         area,
         buf,
         &mut app.library_panel.list_state,
@@ -39,4 +39,5 @@ pub fn render(app: &mut App, area: Rect, buf: &mut Buffer) {
         &app.library_panel.search_query,
         Some((playlist_mode, &playlist_names)),
     );
+    app.library_panel.page_height = height;
 }

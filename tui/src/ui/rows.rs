@@ -115,6 +115,8 @@ pub struct Viewport {
     pub selected: Option<usize>,
 }
 
+pub struct PanelHeight(pub usize);
+
 pub fn viewport(list_state: &mut ListState, len: usize, height: usize) -> Viewport {
     if len == 0 || height == 0 {
         return Viewport { start: 0, end: 0, selected: None };
@@ -229,7 +231,7 @@ pub fn render_song_list_panel(
     searching: bool,
     query: &str,
     playlist_info: Option<PlaylistLookup<'_>>,
-) -> usize {
+) -> PanelHeight {
     keep_header_in_view(list_state, rows);
 
     let match_count = song_count(rows);
@@ -243,7 +245,7 @@ pub fn render_song_list_panel(
     if match_count == 0 && !query.is_empty() {
         list_state.select(None);
         render_no_matches(area, buf, block, query, "songs");
-        return inner_height;
+        return PanelHeight(inner_height);
     }
 
     let window = viewport(list_state, rows.len(), inner_height);
@@ -263,7 +265,7 @@ pub fn render_song_list_panel(
     let list = styled_list(items, block);
     StatefulWidget::render(list, area, buf, &mut local);
 
-    inner_height
+    PanelHeight(inner_height)
 }
 
 pub fn render_no_matches(area: Rect, buf: &mut Buffer, block: Block<'static>, query: &str, noun: &str) {

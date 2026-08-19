@@ -93,3 +93,37 @@ errors are modeled consistently with `thiserror`. Findings below, worst first.
 - [ ] Pre-existing `clippy::collapsible_if` in `tui/src/keymap.rs:151`
   (unrelated to anything above). Cosmetic only.
 
+## Ambiguous return types on action-named functions
+
+Same shape as the `render_song_list_panel` issue fixed via `PanelHeight`
+(see the "Name the return, don't just return it" convention added to
+`CLAUDE.md`): an imperative, verb-phrase function name that reads as
+returning nothing, but which returns a `bool`/`Option<T>` the caller
+actually depends on. Two fix shapes are on the table — pick one and apply
+it consistently across all of these:
+
+**Option A — distinct, specific enums per concept:**
+- `Mutated::{Yes, No}` — shared by `PlaylistStore::rename`, `add_song`,
+  `remove_song`, `rename_song_id`, `delete` (`core/src/playlist.rs:219,
+  229, 242, 264, 278`), all currently `-> bool` for "did the mutation
+  happen."
+- `EventsChanged::{Changed, Unchanged}` — `App::drain_player_events`
+  (`tui/src/app/playback.rs:10`), currently `-> bool`.
+- `Selected::{Found, NotFound}` — `App::select_song_by_id`
+  (`tui/src/app/navigation.rs:194`), currently `-> bool`.
+- `InsertOutcome::{Inserted(SongId), Skipped}` — `insert_song`
+  (`core/src/library.rs:278`), currently `-> Option<SongId>`.
+
+**Option B — one generic `Outcome<T = ()>` reused everywhere:**
+- `enum Outcome<T = ()> { Applied(T), NoOp }`, used as `-> Outcome` for the
+  five `bool`-returning cases above and `-> Outcome<SongId>` for
+  `insert_song`. Fewer new types, but more generic naming — less
+  self-documenting than Option A at each call site (`Outcome::Applied(id)`
+  vs. `InsertOutcome::Inserted(id)`).
+
+Not included: `expire_if_stale` (`tui/src/app/state.rs:278`) — the
+`if_stale` in the name already telegraphs a boolean outcome, so wrapping
+it would be enum-for-enum's-sake. `PlaylistStore`'s five mutators should
+be treated as one shared type regardless of which option is picked —
+they're the same concept repeated five times, not five different ones.
+
