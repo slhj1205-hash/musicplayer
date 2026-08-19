@@ -5,7 +5,7 @@ use std::{
 
 use ratatui::widgets::ListState;
 
-use lyre_core::{PlaylistId, SongId};
+use lyre_core::{MetadataEdits, PlaylistId, SongId};
 
 #[derive(Default)]
 pub struct DirScanState {
@@ -44,6 +44,7 @@ pub struct ModalState {
     pub confirming_remove: Option<(PlaylistId, SongId)>,
     pub showing_help: bool,
     pub song_modal: Option<SongModal>,
+    pub metadata_modal: Option<MetadataEditModal>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -169,6 +170,75 @@ pub struct SongModal {
     pub selected: ChooseActionField,
     pub name_input: String,
     pub side: Option<SidePanel>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MetadataField {
+    Title,
+    Artist,
+    Album,
+    Genre,
+    Track,
+    Date,
+}
+
+impl MetadataField {
+    pub const ALL: &'static [MetadataField] = &[
+        MetadataField::Title,
+        MetadataField::Artist,
+        MetadataField::Album,
+        MetadataField::Genre,
+        MetadataField::Track,
+        MetadataField::Date,
+    ];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            MetadataField::Title => "Title",
+            MetadataField::Artist => "Artist",
+            MetadataField::Album => "Album",
+            MetadataField::Genre => "Genre",
+            MetadataField::Track => "Track",
+            MetadataField::Date => "Date",
+        }
+    }
+
+    pub fn next(self) -> MetadataField {
+        cycle(Self::ALL, self, 1)
+    }
+
+    pub fn prev(self) -> MetadataField {
+        cycle(Self::ALL, self, -1)
+    }
+
+    pub fn value<'a>(&self, edits: &'a MetadataEdits) -> &'a str {
+        match self {
+            MetadataField::Title => &edits.title,
+            MetadataField::Artist => &edits.artist,
+            MetadataField::Album => &edits.album,
+            MetadataField::Genre => &edits.genre,
+            MetadataField::Track => &edits.track,
+            MetadataField::Date => &edits.date,
+        }
+    }
+
+    pub fn value_mut<'a>(&self, edits: &'a mut MetadataEdits) -> &'a mut String {
+        match self {
+            MetadataField::Title => &mut edits.title,
+            MetadataField::Artist => &mut edits.artist,
+            MetadataField::Album => &mut edits.album,
+            MetadataField::Genre => &mut edits.genre,
+            MetadataField::Track => &mut edits.track,
+            MetadataField::Date => &mut edits.date,
+        }
+    }
+}
+
+pub struct MetadataEditModal {
+    pub song: SongId,
+    pub edits: MetadataEdits,
+    pub focused: MetadataField,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

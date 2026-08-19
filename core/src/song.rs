@@ -8,9 +8,10 @@ use std::{
 };
 
 use lofty::{
+    config::WriteOptions,
     file::{AudioFile, TaggedFileExt},
     probe::Probe,
-    tag::{items::Timestamp, Accessor},
+    tag::{items::Timestamp, Accessor, Tag},
 };
 
 pub const SUPPORTED_EXTENSIONS: &[&str] = &[
@@ -72,6 +73,55 @@ pub struct Metadata {
     pub duration: Duration,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct MetadataEdits {
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub genre: String,
+    pub track: String,
+    pub date: String,
+}
+
+impl MetadataEdits {
+    pub fn from_metadata(metadata: &Metadata) -> MetadataEdits {
+        MetadataEdits {
+            title: metadata.title.as_deref().unwrap_or_default().to_string(),
+            artist: metadata.artist.as_deref().unwrap_or_default().to_string(),
+            album: metadata.album.as_deref().unwrap_or_default().to_string(),
+            genre: metadata.genre.as_deref().unwrap_or_default().to_string(),
+            track: metadata.track.map(|t| t.to_string()).unwrap_or_default(),
+            date: metadata.date.map(|d| d.to_string()).unwrap_or_default(),
+        }
+    }
+}
+
+fn set_text(tag: &mut Tag, value: &str, set: fn(&mut Tag, String), remove: fn(&mut Tag)) {
+    if value.is_empty() {
+        remove(tag);
+    } else {
+        set(tag, value.to_string());
+    }
+}
+
+fn parse_track(input: &str) -> Result<Option<u32>, Error> {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    trimmed.parse::<u32>().map(Some).map_err(|_| Error::InvalidTrack(input.to_string()))
+}
+
+fn parse_date(input: &str) -> Result<Option<Timestamp>, Error> {
+    use std::str::FromStr;
+
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    Timestamp::from_str(trimmed).map(Some).map_err(|_| Error::InvalidDate(input.to_string()))
+}
+
 mod timestamp_serde {
     use lofty::tag::items::Timestamp;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -100,6 +150,40 @@ impl Metadata {
         let probed = Probe::open(path).map_err(|source| Error::Probe { path: path.to_path_buf(), source })?;
         let tagged_file = probed.read().map_err(|source| Error::Read { path: path.to_path_buf(), source })?;
         Ok(Metadata::from_tagged_file(&tagged_file))
+    }
+
+    pub fn write(path: &Path, edits: &MetadataEdits) -> Result<(), Error> {
+        let track = parse_track(&edits.track)?;
+        let date = parse_date(&edits.date)?;
+
+        let probed = Probe::open(path).map_err(|source| Error::Probe { path: path.to_path_buf(), source })?;
+        let mut tagged_file = probed.read().map_err(|source| Error::Read { path: path.to_path_buf(), source })?;
+
+        let tag_type = tagged_file.primary_tag_type();
+        if tagged_file.tag(tag_type).is_none() && tagged_file.first_tag().is_none() {
+            tagged_file.insert_tag(Tag::new(tag_type));
+        }
+        let tag = match tagged_file.tag_mut(tag_type) {
+            Some(tag) => tag,
+            None => tagged_file.first_tag_mut().expect("inserted a tag above if none existed"),
+        };
+
+        set_text(tag, edits.title.trim(), Tag::set_title, Tag::remove_title);
+        set_text(tag, edits.artist.trim(), Tag::set_artist, Tag::remove_artist);
+        set_text(tag, edits.album.trim(), Tag::set_album, Tag::remove_album);
+        set_text(tag, edits.genre.trim(), Tag::set_genre, Tag::remove_genre);
+        match track {
+            Some(track) => tag.set_track(track),
+            None => tag.remove_track(),
+        }
+        match date {
+            Some(date) => tag.set_date(date),
+            None => tag.remove_date(),
+        }
+
+        tagged_file
+            .save_to_path(path, WriteOptions::default())
+            .map_err(|source| Error::Write { path: path.to_path_buf(), source })
     }
 
     fn from_tagged_file(tf: &lofty::file::TaggedFile) -> Self {
@@ -389,4 +473,14 @@ pub enum Error {
         #[source]
         source: lofty::error::LoftyError,
     },
+    #[error("failed to write tags to {path}: {source}")]
+    Write {
+        path: PathBuf,
+        #[source]
+        source: lofty::error::LoftyError,
+    },
+    #[error("invalid track number \"{0}\"")]
+    InvalidTrack(String),
+    #[error("invalid date \"{0}\" (try a year like 2024 or a full date like 2024-01-31)")]
+    InvalidDate(String),
 }

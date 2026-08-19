@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     fmt, fs,
     path::{Path, PathBuf},
+    time::{Duration, Instant},
 };
 
 use crate::{library::Library, song::SongId};
@@ -94,6 +95,14 @@ impl Playlist {
     pub(crate) fn retain_songs(&mut self, keep: impl Fn(SongId) -> bool) {
         self.songs.retain(|&id| keep(id));
     }
+
+    fn rename_song_id(&mut self, old: SongId, new: SongId) {
+        for id in &mut self.songs {
+            if *id == old {
+                *id = new;
+            }
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -102,12 +111,16 @@ pub struct PruneStats {
     pub songs_removed: usize,
 }
 
+const FLUSH_AFTER: Duration = Duration::from_millis(750);
+
 pub struct PlaylistStore {
     path: PathBuf,
     playlists: HashMap<PlaylistId, Playlist>,
     sorted_ids: Vec<PlaylistId>,
     membership: HashMap<SongId, Vec<PlaylistId>>,
     revision: u64,
+    dirty: bool,
+    dirty_since: Option<Instant>,
 }
 
 impl PlaylistStore {
@@ -121,31 +134,47 @@ impl PlaylistStore {
             .and_then(|contents| serde_json::from_slice(&contents).ok())
             .unwrap_or_default();
 
-        let mut dirty = false;
+        let mut pruned = false;
         for mut playlist in loaded {
             let before = playlist.len();
             playlist.retain_songs(|id| library.contains(id));
             let removed = before - playlist.len();
             if removed > 0 {
                 stats.songs_removed += removed;
-                dirty = true;
+                pruned = true;
             }
 
             stats.playlists_loaded += 1;
             playlists.insert(playlist.id(), playlist);
         }
 
-        let mut store = PlaylistStore { path, playlists, sorted_ids: Vec::new(), membership: HashMap::new(), revision: 0 };
+        let mut store = PlaylistStore {
+            path,
+            playlists,
+            sorted_ids: Vec::new(),
+            membership: HashMap::new(),
+            revision: 0,
+            dirty: false,
+            dirty_since: None,
+        };
         store.reindex();
 
-        if dirty {
+        if pruned {
             store.save();
         }
         (store, stats)
     }
 
     pub fn empty(path: impl Into<PathBuf>) -> PlaylistStore {
-        PlaylistStore { path: path.into(), playlists: HashMap::new(), sorted_ids: Vec::new(), membership: HashMap::new(), revision: 0 }
+        PlaylistStore {
+            path: path.into(),
+            playlists: HashMap::new(),
+            sorted_ids: Vec::new(),
+            membership: HashMap::new(),
+            revision: 0,
+            dirty: false,
+            dirty_since: None,
+        }
     }
 
     #[inline]
@@ -183,7 +212,7 @@ impl PlaylistStore {
         self.playlists.insert(id, Playlist::new(id, name));
 
         self.reindex();
-        self.save();
+        self.mark_dirty();
         id
     }
 
@@ -193,7 +222,7 @@ impl PlaylistStore {
         };
         playlist.rename(name);
         self.reindex();
-        self.save();
+        self.mark_dirty();
         true
     }
 
@@ -206,7 +235,7 @@ impl PlaylistStore {
         self.membership.entry(song).or_default().push(id);
 
         self.revision += 1;
-        self.save();
+        self.mark_dirty();
         true
     }
 
@@ -228,6 +257,20 @@ impl PlaylistStore {
         }
 
         self.revision += 1;
+        self.mark_dirty();
+        true
+    }
+
+    pub fn rename_song_id(&mut self, old: SongId, new: SongId) -> bool {
+        if old == new || !self.membership.contains_key(&old) {
+            return false;
+        }
+
+        for playlist in self.playlists.values_mut() {
+            playlist.rename_song_id(old, new);
+        }
+
+        self.reindex();
         self.save();
         true
     }
@@ -245,7 +288,7 @@ impl PlaylistStore {
             }
         }
         self.reindex();
-        self.save();
+        self.mark_dirty();
         true
     }
 
@@ -267,6 +310,26 @@ impl PlaylistStore {
         self.revision += 1;
     }
 
+    fn mark_dirty(&mut self) {
+        self.dirty = true;
+        self.dirty_since.get_or_insert_with(Instant::now);
+    }
+
+    pub fn flush_if_due(&mut self) {
+        if self.dirty && self.dirty_since.is_some_and(|since| since.elapsed() >= FLUSH_AFTER) {
+            self.flush();
+        }
+    }
+
+    pub fn flush(&mut self) {
+        if !self.dirty {
+            return;
+        }
+        self.save();
+        self.dirty = false;
+        self.dirty_since = None;
+    }
+
     fn save(&mut self) {
         let all: Vec<&Playlist> = self.sorted_ids.iter().filter_map(|id| self.playlists.get(id)).collect();
         let Ok(json) = serde_json::to_vec_pretty(&all) else { return };
@@ -274,5 +337,11 @@ impl PlaylistStore {
         if let Err(e) = crate::atomic::write(&self.path, &json) {
             eprintln!("warning: failed to save playlists to {}: {e}", self.path.display());
         }
+    }
+}
+
+impl Drop for PlaylistStore {
+    fn drop(&mut self) {
+        self.flush();
     }
 }

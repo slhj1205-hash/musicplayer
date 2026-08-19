@@ -218,4 +218,24 @@ impl Queue {
     pub fn current_position(&self) -> Option<usize> {
         matches!(self.playing, Some(NowPlaying::Queued)).then_some(self.cursor).flatten()
     }
+
+    pub fn rename_song_id(&mut self, old: SongId, new: SongId) {
+        if old == new {
+            return;
+        }
+
+        for id in &mut self.songs {
+            if *id == old {
+                *id = new;
+            }
+        }
+        for id in &mut self.priority {
+            if *id == old {
+                *id = new;
+            }
+        }
+        if self.playing == Some(NowPlaying::Priority(old)) {
+            self.playing = Some(NowPlaying::Priority(new));
+        }
+    }
 }

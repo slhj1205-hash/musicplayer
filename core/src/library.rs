@@ -8,7 +8,7 @@ use rayon::prelude::*;
 
 use crate::{
     scan_cache::{Entry, Probed, ScanCache},
-    song::{is_supported_audio, mtime_secs, Metadata, Song, SongId},
+    song::{self, is_supported_audio, mtime_secs, Metadata, MetadataEdits, Song, SongId},
 };
 
 pub struct Library {
@@ -130,6 +130,34 @@ impl Library {
     pub fn ids(&self) -> impl Iterator<Item = SongId> + '_ {
         self.songs.keys().copied()
     }
+
+    pub fn update_metadata(&mut self, id: SongId, edits: &MetadataEdits) -> Result<SongId, UpdateMetadataError> {
+        let Some(song) = self.songs.get(&id) else {
+            return Err(UpdateMetadataError::NotFound);
+        };
+        let path = song.path().to_path_buf();
+
+        Metadata::write(&path, edits)?;
+
+        let updated = Song::load(&path)?;
+        let new_id = updated.id();
+
+        if let Some(pos) = self.by_path.iter().position(|&existing| existing == id) {
+            self.by_path[pos] = new_id;
+        }
+        self.songs.remove(&id);
+        self.songs.insert(new_id, updated);
+
+        Ok(new_id)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum UpdateMetadataError {
+    #[error("song not found in library")]
+    NotFound,
+    #[error(transparent)]
+    Metadata(#[from] song::Error),
 }
 
 #[derive(Debug, Default, Clone, Copy)]

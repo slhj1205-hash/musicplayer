@@ -1,4 +1,5 @@
 mod input;
+mod metadata;
 mod navigation;
 mod panels;
 mod playback;
@@ -20,8 +21,9 @@ use crate::Backend;
 
 pub use row_builder::RowCache;
 pub use state::{
-    Category, ChooseActionField, DirScanState, LibraryPanelState, ModalState, Panel, PlaylistDisplayMode,
-    PlaylistPanelState, PlaylistView, QueueSource, Row, SidePanel, Sort, SongModal, StatusKind, StatusMessage,
+    Category, ChooseActionField, DirScanState, LibraryPanelState, MetadataEditModal, MetadataField, ModalState,
+    Panel, PlaylistDisplayMode, PlaylistPanelState, PlaylistView, QueueSource, Row, SidePanel, Sort, SongModal,
+    StatusKind, StatusMessage,
 };
 
 pub struct App {
@@ -105,6 +107,8 @@ impl App {
 
             needs_redraw = self.handle_events()?;
 
+            self.playlists.flush_if_due();
+
             if let Some(dir) = self.dir.pending_scan.take() {
                 terminal.draw(|frame| frame.render_widget(&mut self, frame.area()))?;
                 self.finish_dir_scan(dir);
@@ -163,6 +167,7 @@ impl App {
 
                 let (playlists, prune_stats) =
                     PlaylistStore::load(library.root().join("playlists"), &library);
+                self.playlists.flush();
                 self.playlists = playlists;
                 self.playlist_panel.view = PlaylistView::Browsing;
                 self.playlist_panel.search_query.clear();

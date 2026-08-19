@@ -9,7 +9,7 @@ use lyre_core::{
     playlist::PlaylistStore,
     queue::Queue,
     scan_cache::{Entry, Probed, ScanCache},
-    song::{is_supported_audio, SongId},
+    song::{is_supported_audio, Metadata, MetadataEdits, SongId},
     NullBackend, Player,
 };
 use tempfile::TempDir;
@@ -142,6 +142,110 @@ fn library_drops_songs_that_are_deleted_between_scans() {
     std::fs::remove_file(&path).unwrap();
     let (library, _) = Library::scan(dir.path(), &cache_path).unwrap();
     assert_eq!(library.len(), 0);
+}
+
+#[test]
+fn metadata_write_round_trips_through_probe() {
+    let dir = TempDir::new().unwrap();
+    let path = write_song(dir.path(), "one.wav", "One", "Artist", "Album");
+
+    let edits = MetadataEdits {
+        title: "New Title".to_string(),
+        artist: "New Artist".to_string(),
+        album: "New Album".to_string(),
+        genre: "Synthwave".to_string(),
+        track: "7".to_string(),
+        date: "2024".to_string(),
+    };
+    Metadata::write(&path, &edits).unwrap();
+
+    let metadata = Metadata::probe(&path).unwrap();
+    assert_eq!(metadata.title.as_deref(), Some("New Title"));
+    assert_eq!(metadata.artist.as_deref(), Some("New Artist"));
+    assert_eq!(metadata.album.as_deref(), Some("New Album"));
+    assert_eq!(metadata.genre.as_deref(), Some("Synthwave"));
+    assert_eq!(metadata.track, Some(7));
+    assert!(metadata.date.is_some());
+}
+
+#[test]
+fn metadata_write_with_an_empty_field_clears_the_tag() {
+    let dir = TempDir::new().unwrap();
+    let path = write_song(dir.path(), "one.wav", "One", "Artist", "Album");
+
+    let mut edits = MetadataEdits::from_metadata(&Metadata::probe(&path).unwrap());
+    assert_eq!(edits.artist, "Artist");
+    edits.artist.clear();
+    Metadata::write(&path, &edits).unwrap();
+
+    let metadata = Metadata::probe(&path).unwrap();
+    assert_eq!(metadata.artist, None, "an empty field in the edit form must clear the tag, not leave it untouched");
+}
+
+#[test]
+fn metadata_write_rejects_a_non_numeric_track() {
+    let dir = TempDir::new().unwrap();
+    let path = write_song(dir.path(), "one.wav", "One", "Artist", "Album");
+
+    let mut edits = MetadataEdits::from_metadata(&Metadata::probe(&path).unwrap());
+    edits.track = "not a number".to_string();
+
+    assert!(Metadata::write(&path, &edits).is_err());
+}
+
+#[test]
+fn library_update_metadata_assigns_a_new_song_id_and_keeps_library_len_stable() {
+    let dir = TempDir::new().unwrap();
+    write_song(dir.path(), "one.wav", "One", "Artist", "Album");
+    let (mut library, _) = Library::scan(dir.path(), dir.path().join("cache.bin")).unwrap();
+    let old_id = library.ids_by_path()[0];
+
+    let mut edits = MetadataEdits::from_metadata(library.get(old_id).unwrap().metadata());
+    edits.title = "One (Remaster)".to_string();
+
+    let new_id = library.update_metadata(old_id, &edits).unwrap();
+
+    assert_ne!(new_id, old_id, "editing tags changes the file's size/mtime, so its id must change too");
+    assert_eq!(library.len(), 1);
+    assert!(!library.contains(old_id));
+    assert!(library.contains(new_id));
+    assert_eq!(library.get(new_id).unwrap().title(), "One (Remaster)");
+    assert_eq!(library.ids_by_path(), &[new_id], "by_path must be updated in place, not just the map");
+}
+
+#[test]
+fn library_update_metadata_on_an_unknown_song_is_an_error() {
+    let dir = TempDir::new().unwrap();
+    let (mut library, _) = Library::scan(dir.path(), dir.path().join("cache.bin")).unwrap();
+    let missing = SongId::compute(Path::new("missing.mp3"), 1, 1);
+
+    assert!(library.update_metadata(missing, &MetadataEdits::default()).is_err());
+}
+
+#[test]
+fn library_update_metadata_ripples_the_new_song_id_into_playlists_and_persists() {
+    let dir = TempDir::new().unwrap();
+    let playlists_dir = dir.path().join("playlists");
+    write_song(dir.path(), "song.wav", "Song", "Artist", "Album");
+    let (mut library, _) = Library::scan(dir.path(), dir.path().join("cache.bin")).unwrap();
+    let old_id = library.ids_by_path()[0];
+
+    let mut store = PlaylistStore::empty(&playlists_dir);
+    let playlist_id = store.create("Favourites");
+    store.add_song(playlist_id, old_id);
+
+    let mut edits = MetadataEdits::from_metadata(library.get(old_id).unwrap().metadata());
+    edits.title = "Song (Remaster)".to_string();
+    let new_id = library.update_metadata(old_id, &edits).unwrap();
+
+    assert!(store.rename_song_id(old_id, new_id));
+    assert_eq!(store.get(playlist_id).unwrap().songs(), &[new_id]);
+    assert!(store.containing(new_id).contains(&playlist_id));
+    assert!(store.containing(old_id).is_empty());
+
+    let (reloaded, stats) = PlaylistStore::load(&playlists_dir, &library);
+    assert_eq!(stats.songs_removed, 0, "the renamed song must still be considered present after reload");
+    assert_eq!(reloaded.get(playlist_id).unwrap().songs(), &[new_id]);
 }
 
 #[test]
@@ -297,6 +401,64 @@ fn playlist_store_ids_sorted_by_name_are_case_insensitive() {
 }
 
 #[test]
+fn playlist_store_defers_writing_to_disk_until_flush_is_due() {
+    let dir = TempDir::new().unwrap();
+    let playlists_dir = dir.path().join("playlists");
+    let mut store = PlaylistStore::empty(&playlists_dir);
+
+    store.create("Mix");
+    assert!(!playlists_dir.exists(), "a fresh mutation should not hit disk immediately");
+
+    store.flush_if_due();
+    assert!(!playlists_dir.exists(), "flush_if_due should not write before the debounce window elapses");
+
+    std::thread::sleep(Duration::from_millis(800));
+    store.flush_if_due();
+    assert!(playlists_dir.exists(), "flush_if_due should write once the debounce window has elapsed");
+}
+
+#[test]
+fn playlist_store_flush_deadline_is_anchored_to_the_first_pending_change() {
+    let dir = TempDir::new().unwrap();
+    let playlists_dir = dir.path().join("playlists");
+    let mut store = PlaylistStore::empty(&playlists_dir);
+    let song = SongId::compute(Path::new("song.mp3"), 1, 1);
+
+    let id = store.create("Mix");
+    std::thread::sleep(Duration::from_millis(400));
+    store.add_song(id, song);
+
+    std::thread::sleep(Duration::from_millis(400));
+    store.flush_if_due();
+    assert!(
+        playlists_dir.exists(),
+        "the debounce window should be measured from the first pending change, not reset by later ones"
+    );
+}
+
+#[test]
+fn playlist_store_flush_writes_immediately_regardless_of_the_debounce_window() {
+    let dir = TempDir::new().unwrap();
+    let playlists_dir = dir.path().join("playlists");
+    let mut store = PlaylistStore::empty(&playlists_dir);
+
+    store.create("Mix");
+    store.flush();
+    assert!(playlists_dir.exists(), "flush should write immediately without waiting for the debounce window");
+}
+
+#[test]
+fn playlist_store_flushes_pending_changes_on_drop() {
+    let dir = TempDir::new().unwrap();
+    let playlists_dir = dir.path().join("playlists");
+    {
+        let mut store = PlaylistStore::empty(&playlists_dir);
+        store.create("Mix");
+    }
+    assert!(playlists_dir.exists(), "dropping the store should flush any pending write");
+}
+
+#[test]
 fn playlist_store_revision_advances_on_mutation_but_not_on_reads() {
     let dir = TempDir::new().unwrap();
     let mut store = PlaylistStore::empty(dir.path().join("playlists"));
@@ -432,6 +594,38 @@ fn queue_contains_reflects_membership() {
 
     assert!(queue.contains(a));
     assert!(!queue.contains(b));
+}
+
+#[test]
+fn queue_rename_song_id_updates_the_playing_priority_song() {
+    let ids: Vec<SongId> = (0..3).map(|i| SongId::compute(Path::new(&format!("{i}.mp3")), i, i)).collect();
+    let old = SongId::compute(Path::new("old.mp3"), 9, 9);
+    let new = SongId::compute(Path::new("new.mp3"), 10, 10);
+
+    let mut queue = Queue::new(ids.clone());
+    queue.queue_next(old);
+    assert_eq!(queue.next(), Some(old), "sanity check: the priority song is now playing");
+
+    queue.rename_song_id(old, new);
+
+    assert_eq!(queue.current_id(), Some(new), "the currently-playing priority song must follow the rename");
+    assert!(!queue.contains(old));
+}
+
+#[test]
+fn queue_rename_song_id_updates_upcoming_and_regular_queue_entries() {
+    let ids: Vec<SongId> = (0..3).map(|i| SongId::compute(Path::new(&format!("{i}.mp3")), i, i)).collect();
+    let new = SongId::compute(Path::new("new.mp3"), 10, 10);
+
+    let mut queue = Queue::new(ids.clone());
+    queue.play_at(0);
+    queue.queue_next(ids[2]);
+
+    queue.rename_song_id(ids[2], new);
+
+    assert_eq!(queue.upcoming(3), vec![new, ids[1], new], "both the priority slot and the regular queue entry must be renamed");
+    assert!(!queue.contains(ids[2]));
+    assert!(queue.contains(new));
 }
 
 #[test]

@@ -1,6 +1,6 @@
 use ratatui::widgets::ListState;
 
-use lyre_core::PlaylistId;
+use lyre_core::{PlaylistId, SongId};
 
 use super::state::{Panel, PlaylistView, QueueSource, Row, StatusKind};
 use super::App;
@@ -181,12 +181,21 @@ impl App {
             return;
         };
 
-        match self.visible_rows().iter().position(|row| matches!(row, Row::Song(id, _) if *id == current)) {
-            Some(i) => self.active_list_state_mut().select(Some(i)),
-            None => self.set_status(
+        if !self.select_song_by_id(current) {
+            self.set_status(
                 "now playing isn't in the current view -- clear the search to find it",
                 StatusKind::Info,
-            ),
+            );
+        }
+    }
+
+    pub(super) fn select_song_by_id(&mut self, id: SongId) -> bool {
+        match self.visible_rows().iter().position(|row| matches!(row, Row::Song(row_id, _) if *row_id == id)) {
+            Some(i) => {
+                self.active_list_state_mut().select(Some(i));
+                true
+            }
+            None => false,
         }
     }
 

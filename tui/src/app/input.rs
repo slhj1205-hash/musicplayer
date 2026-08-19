@@ -26,6 +26,10 @@ impl App {
             self.handle_song_modal_key(key);
             return;
         }
+        if self.modal.metadata_modal.is_some() {
+            self.handle_metadata_modal_key(key);
+            return;
+        }
         if self.dir.editing_dir {
             self.handle_dir_input_key(key);
             return;
@@ -110,6 +114,7 @@ impl App {
             Some(Action::PrevTrack) => self.go_back(),
             Some(Action::QueueNext) => self.queue_selected_next(),
             Some(Action::OpenSongModal) => self.open_song_modal(),
+            Some(Action::OpenMetadataEditModal) => self.open_metadata_modal(),
             Some(Action::RemoveFromPlaylist) => self.open_remove_confirm(),
             Some(Action::ChangeDirectory) => {
                 self.dir.dir_input = self.library.root().display().to_string();
@@ -140,7 +145,10 @@ impl App {
 
     fn handle_confirm_quit_key(&mut self, key: KeyEvent) {
         match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => self.should_exit = true,
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                self.playlists.flush();
+                self.should_exit = true;
+            }
             _ => self.modal.confirming_quit = false,
         }
     }
@@ -320,6 +328,38 @@ impl App {
             }
             _ => {
                 self.set_song_modal(song, selected, name_input, Some(SidePanel::AddToPlaylist { options, pinned, list_state }));
+            }
+        }
+    }
+
+    fn handle_metadata_modal_key(&mut self, key: KeyEvent) {
+        let Some(mut modal) = self.modal.metadata_modal.take() else { return };
+
+        match key.code {
+            KeyCode::Esc => {}
+            KeyCode::Tab | KeyCode::Down => {
+                modal.focused = modal.focused.next();
+                modal.error = None;
+                self.modal.metadata_modal = Some(modal);
+            }
+            KeyCode::BackTab | KeyCode::Up => {
+                modal.focused = modal.focused.prev();
+                modal.error = None;
+                self.modal.metadata_modal = Some(modal);
+            }
+            KeyCode::Enter => self.save_metadata_edit(modal),
+            KeyCode::Backspace => {
+                modal.focused.value_mut(&mut modal.edits).pop();
+                modal.error = None;
+                self.modal.metadata_modal = Some(modal);
+            }
+            KeyCode::Char(c) => {
+                modal.focused.value_mut(&mut modal.edits).push(c);
+                modal.error = None;
+                self.modal.metadata_modal = Some(modal);
+            }
+            _ => {
+                self.modal.metadata_modal = Some(modal);
             }
         }
     }

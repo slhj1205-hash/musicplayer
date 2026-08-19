@@ -3,7 +3,7 @@ use lyre_core::{Library, PlaylistStore};
 use ratatui::{buffer::Buffer, layout::Rect, style::Style, widgets::Widget};
 
 use lyre_tui::{
-    app::{App, Category, Panel, PlaylistView, Row, Sort},
+    app::{App, Category, MetadataField, Panel, PlaylistView, Row, Sort},
     config, ui::sort_title,
     Backend,
 };
@@ -310,6 +310,131 @@ fn shift_a_opens_the_song_actions_modal_not_lowercase_p() {
 
     h.app.on_key(special(KeyCode::Char('A')));
     assert!(h.app.modal.song_modal.is_some(), "Shift+A must open the song actions modal");
+}
+
+#[test]
+fn shift_e_opens_the_metadata_modal_prefilled_with_the_selected_songs_tags() {
+    let mut h = harness();
+    h.app.on_key(key('g'));
+    let Some(Row::Song(id, _)) = h.app.selected_row() else { panic!("expected a song row") };
+    let expected_title = h.app.library.get(id).unwrap().title().to_string();
+
+    h.app.on_key(special(KeyCode::Char('E')));
+
+    let modal = h.app.modal.metadata_modal.as_ref().expect("Shift+E must open the metadata edit modal");
+    assert_eq!(modal.song, id);
+    assert_eq!(modal.edits.title, expected_title);
+    assert_eq!(modal.focused, MetadataField::Title);
+    assert!(modal.error.is_none());
+}
+
+#[test]
+fn metadata_modal_tab_and_shift_tab_cycle_through_every_field_and_wrap() {
+    let mut h = harness();
+    h.app.on_key(key('g'));
+    h.app.on_key(special(KeyCode::Char('E')));
+
+    for &expected in MetadataField::ALL {
+        assert_eq!(h.app.modal.metadata_modal.as_ref().unwrap().focused, expected);
+        h.app.on_key(special(KeyCode::Tab));
+    }
+    assert_eq!(
+        h.app.modal.metadata_modal.as_ref().unwrap().focused,
+        MetadataField::Title,
+        "tabbing past the last field must wrap back to the first"
+    );
+
+    h.app.on_key(special(KeyCode::BackTab));
+    assert_eq!(
+        h.app.modal.metadata_modal.as_ref().unwrap().focused,
+        *MetadataField::ALL.last().unwrap(),
+        "shift-tab from the first field must wrap back to the last"
+    );
+}
+
+#[test]
+fn metadata_modal_esc_cancels_without_changing_the_library() {
+    let mut h = harness();
+    h.app.on_key(key('g'));
+    let Some(Row::Song(id, _)) = h.app.selected_row() else { panic!("expected a song row") };
+    let before = h.app.library.get(id).unwrap().title().to_string();
+
+    h.app.on_key(special(KeyCode::Char('E')));
+    h.app.on_key(key('x'));
+    h.app.on_key(special(KeyCode::Esc));
+
+    assert!(h.app.modal.metadata_modal.is_none());
+    assert_eq!(h.app.library.get(id).unwrap().title(), before);
+}
+
+#[test]
+fn metadata_modal_editing_the_title_and_saving_updates_the_library() {
+    let mut h = harness();
+    h.app.on_key(key('g'));
+    let Some(Row::Song(old_id, _)) = h.app.selected_row() else { panic!("expected a song row") };
+
+    h.app.on_key(special(KeyCode::Char('E')));
+    for _ in 0..32 {
+        h.app.on_key(special(KeyCode::Backspace));
+    }
+    for c in "Retitled".chars() {
+        h.app.on_key(key(c));
+    }
+    h.app.on_key(special(KeyCode::Enter));
+
+    assert!(h.app.modal.metadata_modal.is_none(), "a successful save must close the modal");
+    assert!(!h.app.library.contains(old_id), "the old song id must no longer resolve");
+
+    let new_song = h.app.library.songs_by_path().find(|s| s.title() == "Retitled");
+    assert!(new_song.is_some(), "the library must contain a song with the new title");
+    assert!(h.app.status.text.contains("updated metadata"));
+}
+
+#[test]
+fn metadata_modal_saving_a_non_numeric_track_keeps_the_modal_open_with_an_error() {
+    let mut h = harness();
+    h.app.on_key(key('g'));
+    let Some(Row::Song(old_id, _)) = h.app.selected_row() else { panic!("expected a song row") };
+
+    h.app.on_key(special(KeyCode::Char('E')));
+    for _ in 0..MetadataField::ALL.iter().position(|&f| f == MetadataField::Track).unwrap() {
+        h.app.on_key(special(KeyCode::Tab));
+    }
+    for c in "not-a-number".chars() {
+        h.app.on_key(key(c));
+    }
+    h.app.on_key(special(KeyCode::Enter));
+
+    let modal = h.app.modal.metadata_modal.as_ref().expect("a failed save must keep the modal open");
+    assert!(modal.error.is_some());
+    assert_eq!(modal.song, old_id, "the failed edit must be preserved so the user can fix it");
+    assert!(h.app.library.contains(old_id), "the library must be untouched by a failed write");
+}
+
+#[test]
+fn metadata_modal_save_carries_the_now_playing_song_to_its_new_id() {
+    let mut h = harness();
+    h.app.on_key(key('g'));
+    let Some(Row::Song(old_id, _)) = h.app.selected_row() else { panic!("expected a song row") };
+
+    h.app.on_key(special(KeyCode::Enter));
+    assert_eq!(h.app.queue.current_id(), Some(old_id), "sanity check: the song is now playing");
+
+    h.app.on_key(special(KeyCode::Char('E')));
+    for _ in 0..32 {
+        h.app.on_key(special(KeyCode::Backspace));
+    }
+    for c in "Retitled".chars() {
+        h.app.on_key(key(c));
+    }
+    h.app.on_key(special(KeyCode::Enter));
+
+    let new_id = h.app.library.songs_by_path().find(|s| s.title() == "Retitled").unwrap().id();
+    assert_eq!(
+        h.app.queue.current_id(),
+        Some(new_id),
+        "the currently-playing song must follow the id change, not silently stop tracking it"
+    );
 }
 
 #[test]

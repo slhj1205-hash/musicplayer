@@ -1,6 +1,7 @@
 mod footer;
 mod header;
 mod library;
+mod metadata_modal;
 mod modals;
 mod now_playing;
 mod playlists;
@@ -59,6 +60,8 @@ impl Widget for &mut App {
             modals::render_help_overlay(area, buf);
         } else if self.modal.song_modal.is_some() {
             song_modal::render(self, area, buf);
+        } else if self.modal.metadata_modal.is_some() {
+            metadata_modal::render(self, area, buf);
         }
     }
 }
