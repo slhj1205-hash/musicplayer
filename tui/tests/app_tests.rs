@@ -803,6 +803,8 @@ fn youtube_modal_rejects_a_directory_that_escapes_the_library_root() {
         title: "Some Title".to_string(),
         artist: "Some Artist".to_string(),
         album: String::new(),
+        title_sort: String::new(),
+        artist_sort: String::new(),
         directory: "../escape".to_string(),
         file_name: "SomeArtist-SomeTitle.mp3".to_string(),
         file_name_overridden: true,
@@ -828,6 +830,8 @@ fn youtube_modal_auto_generates_the_file_name_from_title_and_artist_until_overri
         title: String::new(),
         artist: String::new(),
         album: String::new(),
+        title_sort: String::new(),
+        artist_sort: String::new(),
         directory: String::new(),
         file_name: String::new(),
         file_name_overridden: false,
@@ -960,4 +964,66 @@ fn accepting_the_romanized_artist_prompt_applies_it_and_closes_the_modal() {
 
     assert!(h.app.modal.romanized_artist_confirm.is_none());
     assert_eq!(h.app.library.len(), songs_before, "applying must not add or remove songs, only re-tag them");
+}
+
+#[test]
+fn youtube_field_visible_hides_the_romanized_fields_by_default() {
+    let fields = lyre_tui::app::YoutubeFieldsModal {
+        url: "https://example.com/watch?v=x".to_string(),
+        title: String::new(),
+        artist: String::new(),
+        album: String::new(),
+        title_sort: String::new(),
+        artist_sort: String::new(),
+        directory: String::new(),
+        file_name: String::new(),
+        file_name_overridden: false,
+        focused: lyre_tui::app::YoutubeField::Title,
+        error: None,
+    };
+    let visible = lyre_tui::app::YoutubeField::visible(&fields);
+
+    assert!(!visible.contains(&lyre_tui::app::YoutubeField::TitleSort));
+    assert!(!visible.contains(&lyre_tui::app::YoutubeField::ArtistSort));
+}
+
+#[test]
+fn youtube_modal_typing_a_non_ascii_artist_reveals_the_artist_sort_field_in_the_tab_order() {
+    let mut h = harness();
+    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::EditingFields(lyre_tui::app::YoutubeFieldsModal {
+        url: "https://example.com/watch?v=x".to_string(),
+        title: String::new(),
+        artist: String::new(),
+        album: String::new(),
+        title_sort: String::new(),
+        artist_sort: String::new(),
+        directory: String::new(),
+        file_name: String::new(),
+        file_name_overridden: false,
+        focused: lyre_tui::app::YoutubeField::Artist,
+        error: None,
+    }));
+
+    for c in "夜明けバンド".chars() {
+        h.app.on_key(key(c));
+    }
+
+    match h.app.modal.youtube_modal.as_ref().unwrap() {
+        lyre_tui::app::YoutubeModal::EditingFields(fields) => {
+            let visible = lyre_tui::app::YoutubeField::visible(fields);
+            assert!(
+                visible.contains(&lyre_tui::app::YoutubeField::ArtistSort),
+                "a non-ASCII artist must reveal the romanized field"
+            );
+        }
+        _ => panic!("expected EditingFields"),
+    }
+
+    h.app.on_key(special(KeyCode::Tab));
+    match h.app.modal.youtube_modal.as_ref().unwrap() {
+        lyre_tui::app::YoutubeModal::EditingFields(fields) => {
+            assert_eq!(fields.focused, lyre_tui::app::YoutubeField::ArtistSort);
+        }
+        _ => panic!("expected EditingFields"),
+    }
 }

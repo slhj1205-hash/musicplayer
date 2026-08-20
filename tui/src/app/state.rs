@@ -288,6 +288,8 @@ pub struct YoutubeFieldsModal {
     pub title: String,
     pub artist: String,
     pub album: String,
+    pub title_sort: String,
+    pub artist_sort: String,
     pub directory: String,
     pub file_name: String,
     pub file_name_overridden: bool,
@@ -298,7 +300,9 @@ pub struct YoutubeFieldsModal {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum YoutubeField {
     Title,
+    TitleSort,
     Artist,
+    ArtistSort,
     Album,
     Directory,
     FileName,
@@ -307,34 +311,52 @@ pub enum YoutubeField {
 impl YoutubeField {
     pub const ALL: &'static [YoutubeField] = &[
         YoutubeField::Title,
+        YoutubeField::TitleSort,
         YoutubeField::Artist,
+        YoutubeField::ArtistSort,
         YoutubeField::Album,
         YoutubeField::Directory,
         YoutubeField::FileName,
     ];
 
+    pub fn visible(fields: &YoutubeFieldsModal) -> Vec<YoutubeField> {
+        Self::ALL.iter().copied().filter(|field| field.is_visible(fields)).collect()
+    }
+
+    fn is_visible(&self, fields: &YoutubeFieldsModal) -> bool {
+        match self {
+            YoutubeField::TitleSort => needs_romanization(&fields.title),
+            YoutubeField::ArtistSort => needs_romanization(&fields.artist),
+            _ => true,
+        }
+    }
+
     pub fn label(&self) -> &'static str {
         match self {
             YoutubeField::Title => "Title",
+            YoutubeField::TitleSort => "Title (roman.)",
             YoutubeField::Artist => "Artist",
+            YoutubeField::ArtistSort => "Artist (roman.)",
             YoutubeField::Album => "Album",
             YoutubeField::Directory => "Directory",
             YoutubeField::FileName => "Filename",
         }
     }
 
-    pub fn next(self) -> YoutubeField {
-        cycle(Self::ALL, self, 1)
+    pub fn next(self, fields: &YoutubeFieldsModal) -> YoutubeField {
+        cycle(&Self::visible(fields), self, 1)
     }
 
-    pub fn prev(self) -> YoutubeField {
-        cycle(Self::ALL, self, -1)
+    pub fn prev(self, fields: &YoutubeFieldsModal) -> YoutubeField {
+        cycle(&Self::visible(fields), self, -1)
     }
 
     pub fn value<'a>(&self, fields: &'a YoutubeFieldsModal) -> &'a str {
         match self {
             YoutubeField::Title => &fields.title,
+            YoutubeField::TitleSort => &fields.title_sort,
             YoutubeField::Artist => &fields.artist,
+            YoutubeField::ArtistSort => &fields.artist_sort,
             YoutubeField::Album => &fields.album,
             YoutubeField::Directory => &fields.directory,
             YoutubeField::FileName => &fields.file_name,
@@ -344,7 +366,9 @@ impl YoutubeField {
     pub fn value_mut<'a>(&self, fields: &'a mut YoutubeFieldsModal) -> &'a mut String {
         match self {
             YoutubeField::Title => &mut fields.title,
+            YoutubeField::TitleSort => &mut fields.title_sort,
             YoutubeField::Artist => &mut fields.artist,
+            YoutubeField::ArtistSort => &mut fields.artist_sort,
             YoutubeField::Album => &mut fields.album,
             YoutubeField::Directory => &mut fields.directory,
             YoutubeField::FileName => &mut fields.file_name,

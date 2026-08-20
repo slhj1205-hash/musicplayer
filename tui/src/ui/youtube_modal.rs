@@ -10,7 +10,7 @@ use crate::app::{App, YoutubeField, YoutubeModal};
 
 use super::{centered_rect, dim_area, format_duration, modal_block, modal_body_style};
 
-const WIDTH: u16 = 56;
+const WIDTH: u16 = 62;
 
 fn label_style() -> Style {
     Style::new().fg(tailwind::SLATE.c400)
@@ -108,13 +108,14 @@ fn render_confirming_video(info: &lyre_core::youtube::VideoInfo, full_area: Rect
 }
 
 fn render_editing_fields(fields: &crate::app::YoutubeFieldsModal, full_area: Rect, buf: &mut Buffer) {
-    let mut lines: Vec<Line> = Vec::with_capacity(YoutubeField::ALL.len() + 5);
+    let visible = YoutubeField::visible(fields);
+    let mut lines: Vec<Line> = Vec::with_capacity(visible.len() + 5);
     lines.push(Line::raw(""));
 
-    for &field in YoutubeField::ALL {
+    for field in visible {
         let focused = field == fields.focused;
         let cursor = if focused { "▏" } else { "" };
-        let label = format!("{:<10}", field.label());
+        let label = format!("{:<16}", field.label());
         lines.push(Line::from(vec![
             Span::styled(label, label_style()),
             Span::styled(format!("{}{cursor}", field.value(fields)), value_style(focused)),

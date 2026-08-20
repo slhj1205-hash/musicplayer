@@ -62,8 +62,8 @@ impl App {
             genre: String::new(),
             track: String::new(),
             date: String::new(),
-            title_sort: String::new(),
-            artist_sort: String::new(),
+            title_sort: fields.title_sort.clone(),
+            artist_sort: fields.artist_sort.clone(),
         };
 
         if let Err(e) = Metadata::write(&path, &edits) {
@@ -90,6 +90,8 @@ impl App {
                 self.rows.invalidate();
                 self.set_status(format!("downloaded and added: {label}"), StatusKind::Success);
                 self.select_song_by_id(id);
+
+                self.maybe_prompt_romanized_artist(id, &fields.artist_sort, "");
             }
             InsertOutcome::Collision { .. } => {
                 self.set_status("downloaded song already exists in the library", StatusKind::Info);
@@ -138,6 +140,8 @@ impl App {
                         title: String::new(),
                         artist: String::new(),
                         album: String::new(),
+                        title_sort: String::new(),
+                        artist_sort: String::new(),
                         directory: String::new(),
                         file_name: String::new(),
                         file_name_overridden: false,
@@ -176,12 +180,14 @@ impl App {
         match key.code {
             KeyCode::Esc => {}
             KeyCode::Tab | KeyCode::Down => {
-                fields.focused = fields.focused.next();
+                let focused = fields.focused;
+                fields.focused = focused.next(&fields);
                 fields.error = None;
                 self.modal.youtube_modal = Some(YoutubeModal::EditingFields(fields));
             }
             KeyCode::BackTab | KeyCode::Up => {
-                fields.focused = fields.focused.prev();
+                let focused = fields.focused;
+                fields.focused = focused.prev(&fields);
                 fields.error = None;
                 self.modal.youtube_modal = Some(YoutubeModal::EditingFields(fields));
             }

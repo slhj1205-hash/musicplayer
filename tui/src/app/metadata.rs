@@ -53,7 +53,7 @@ impl App {
         }
     }
 
-    fn maybe_prompt_romanized_artist(&mut self, saved_song: lyre_core::SongId, artist_sort: &str, original: &str) {
+    pub(super) fn maybe_prompt_romanized_artist(&mut self, saved_song: lyre_core::SongId, artist_sort: &str, original: &str) {
         let value = artist_sort.trim();
         if value.is_empty() || value == original.trim() {
             return;
