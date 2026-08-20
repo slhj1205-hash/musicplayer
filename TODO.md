@@ -136,3 +136,295 @@ it would be enum-for-enum's-sake. `PlaylistStore`'s five mutators should
 be treated as one shared type regardless of which option is picked —
 they're the same concept repeated five times, not five different ones.
 
+# YouTube (yt-dlp) download integration — plan (2026-08-20)
+
+Not started. Lets the user paste a YouTube URL, confirm it resolved to the
+right video, fill in tags and a filename by hand, and download the audio
+straight into the library. Downloading-then-scanning was chosen over live
+streaming: `SongId` is derived from a local path+len+mtime
+(`core/src/song.rs`), and `Player::play` canonicalizes the song's path into
+a `file://` URI (`core/src/player.rs`) — both assume a real file on disk.
+Streaming would mean teaching `AudioBackend` a second source type and giving
+up tag-based metadata for no real benefit here, so this plan always lands a
+tagged file in the library and lets the existing scan/insert path take it
+from there.
+
+## Dependency
+
+- [ ] Add the `yt-dlp` crate to `core/Cargo.toml` behind a new `youtube`
+  Cargo feature (`[features] youtube = ["dep:yt-dlp", "dep:tokio"]`), not as
+  an unconditional dependency. It pulls in `tokio`/`reqwest`, which is a lot
+  of weight for one optional capability — the project already avoids that
+  (see `fnv` being chosen over `DefaultHasher` specifically for being small
+  and dependency-free, above). Default `cargo build` stays as-is;
+  `cargo build --features youtube` opts in.
+
+## `core/src/youtube.rs` — new module
+
+- [ ] `fn fetch_info(url: &str, binaries_dir: &Path) -> Result<VideoInfo, Error>`
+  — info-only yt-dlp call (no download). Returns:
+  ```rust
+  pub struct VideoInfo {
+      pub title: String,
+      pub uploader: String,
+      pub duration: Duration,
+  }
+  ```
+  This is display-only, to let the user confirm the link resolved to the
+  right video. **It is never used to populate the editable Title/Artist/Album
+  fields** — those are always typed by hand (see "Metadata fields" below).
+- [ ] `fn download_audio(url: &str, binaries_dir: &Path, dest_path: &Path) -> Result<(), Error>`
+  — full download + ffmpeg audio extraction to `.mp3`, writing to the exact
+  `dest_path` the caller has already resolved (see "Filename generation" and
+  "Directory validation" below for how that path is built and checked).
+- [ ] Both functions are synchronous on the outside. Internally each builds
+  a single-threaded `tokio::runtime::Runtime` and `.block_on`s the `yt_dlp`
+  crate's async calls, so nothing outside this module needs to know tokio
+  is involved.
+- [ ] `binaries_dir` is where the crate caches its self-managed `yt-dlp`/
+  `ffmpeg` binaries (downloaded once, reused after). Resolved by the caller
+  (see "Config" below) and passed in as a parameter — same pattern as
+  `Library::scan(root, cache_path)` already uses for its cache path, so
+  `core` stays UI-independent and doesn't reach into XDG env vars itself.
+- [ ] Own `thiserror` `Error` enum, matching the style of `song::Error` /
+  `player::Error` (structured variants with `#[source]`, not a string).
+
+## Filename generation — pure function in `core`
+
+- [ ] `pub fn generate_file_name(artist: &str, title: &str) -> String` in
+  `core/src/youtube.rs`. Always produces a `.mp3` filename (mp3-only for
+  now, per decision below).
+- [ ] Algorithm, fixed by two worked examples:
+  - Artist `John leSmith's` + Title `38 cats` → `JohnLeSmiths-38Cats.mp3`
+  - Title `Rock-n-Roll` → `RockNRoll` (within whatever field it's in)
+  - Rule: **split each field into words on whitespace *and* hyphens** (both
+    are word boundaries) — **but not on apostrophes**, which are stripped in
+    place rather than treated as a boundary.
+  - Capitalize only the first character of each resulting word; leave the
+    rest of the word untouched (so `leSmith's` → `LeSmith's`, the internal
+    capital `S` is preserved).
+  - Strip any remaining non-alphanumeric characters from each word (drops
+    the apostrophe: `LeSmith's` → `LeSmiths`).
+  - Concatenate all words within one field with no separator
+    (`Rock`+`N`+`Roll` → `RockNRoll`; `John`+`LeSmiths` → `JohnLeSmiths`).
+  - Join the artist-chunk and title-chunk with a single `-`.
+  - Append `.mp3`.
+  - Verify against both worked examples above before considering this done.
+- [ ] No fallback text for an empty artist/title — an empty or
+  partially-empty auto-generated name is fine, because the user can always
+  override the Filename field by hand (see modal flow below). Don't invent
+  placeholder strings for this.
+- [ ] Sentence-named test cases in `core/tests/core_tests.rs`, e.g.:
+  - `generate_file_name_capitalizes_each_word_and_strips_apostrophes`
+  - `generate_file_name_splits_words_on_hyphens_but_not_apostrophes`
+  - `generate_file_name_drops_a_word_made_entirely_of_punctuation`
+  - `generate_file_name_handles_an_empty_artist_or_title`
+  These need no I/O and no yt-dlp — pure `&str -> String`, so they're cheap
+  to get exhaustively right up front rather than fixing edge cases one at a
+  time later.
+
+## Background thread + channel (new infrastructure)
+
+- [ ] Nothing in this codebase currently uses a background thread —
+  `Library::scan` blocks the calling thread directly, which is fine for a
+  local disk scan but not for a multi-second network download. This feature
+  introduces the first `std::thread::spawn` + `mpsc` channel in the project.
+- [ ] `DownloadEvent` enum sent from the background thread to the TUI:
+  ```rust
+  pub enum DownloadEvent {
+      InfoReady(VideoInfo),
+      InfoError(String),
+      DownloadComplete(PathBuf),
+      DownloadError(String),
+  }
+  ```
+- [ ] The info fetch (step 2 below) and the real download (step 7 below)
+  are each spawned as their own thread/job when triggered; the app polls the
+  receiving end of the channel once per tick, the same shape
+  `Player::poll_events` already uses for backend events — this fits the
+  existing event-loop pattern instead of inventing a new one.
+
+## `Library::insert` — new public method (correction from earlier discussion)
+
+`core/src/library.rs:278` already has a **private** free function
+`fn insert_song(songs: &mut HashMap<SongId, Song>, song: Song, skipped: &mut usize) -> Option<SongId>`,
+used only internally by `scan`. It is not currently callable from outside
+`Library`, despite being referenced in the "Ambiguous return types" section
+above — that section is about renaming its return type someday, not about
+an existing public API.
+
+- [ ] Add:
+  ```rust
+  pub enum InsertOutcome {
+      Inserted(SongId),
+      Collision { existing: SongId },
+  }
+
+  impl Library {
+      pub fn insert(&mut self, song: Song) -> InsertOutcome {
+          ...
+      }
+  }
+  ```
+  Same collision-check logic as the existing private `insert_song` (warn
+  and skip on a path mismatch under the same `SongId`), wrapped as a
+  `&mut self` method and made `pub`, rather than reimplemented. Whether the
+  private free function ends up delegating to this new method, or is left
+  standing alone, is a small implementation-time call, not a planning one.
+- [ ] A full rescan after every download was considered and rejected —
+  it would re-probe every file in the library (via rayon) just to add one
+  song, and would visibly pause the TUI each time. `insert` avoids that.
+
+## Metadata fields — never sourced from yt-dlp
+
+- [ ] Title/Artist/Album are **always typed by hand** by the user. yt-dlp is
+  used only for (a) the info-only confirmation step and (b) the actual
+  audio download — never to prefill these fields. This is a deliberate
+  choice, not a gap to fill in later.
+- [ ] Tag writing reuses the exact path the existing metadata-edit modal
+  already uses (`tui/src/app/metadata.rs`, `core/src/library.rs`
+  `update_metadata`): build a `lyre_core::MetadataEdits` from the modal's
+  Title/Artist/Album (Genre/Track/Date left blank — the modal doesn't
+  collect them), call `Metadata::write(&downloaded_path, &edits)` directly
+  (the same function `update_metadata` calls), then `Song::load(&path)`,
+  then the new `Library::insert`. No new tag-writing code.
+
+## Directory field — must stay under `library.root()`
+
+- [ ] The directory input is a **relative** subpath of `library.root()`,
+  not a free path.
+- [ ] Reject/strip `..` components and reject absolute paths.
+- [ ] After joining `library.root()` + the typed subpath, canonicalize and
+  confirm the result is still a descendant of `library.root()` before doing
+  anything with it — same shape of check you'd want anywhere user-typed text
+  becomes a filesystem path.
+- [ ] `create_dir_all` the resolved directory at confirm-time if it doesn't
+  exist yet.
+- [ ] Default: empty (downloads straight into the root), or the last-used
+  subdirectory.
+
+## Collision handling
+
+- [ ] If `directory/file_name.mp3` already exists at confirm-time, do not
+  silently overwrite or silently rename. Show a dedicated modal state
+  (`YoutubeModal::ResolvingCollision`) informing the user of the conflict,
+  with two explicit choices:
+  - **overwrite** — proceed with the existing path.
+  - **rename** — return to the fields modal with focus on the Filename
+    field so the user can retype it.
+- [ ] Checked once at confirm-time (an `fs::exists` / metadata check), not
+  on every keystroke while the filename is being edited.
+
+## TUI modal state (`tui/src/app/state.rs`)
+
+Three-stage modal, following the existing `MetadataEditModal`/
+`MetadataField` shape (field enum with `ALL`/`label`/`next`/`prev`/`value`/
+`value_mut`, `focused` field on the modal, `Tab` to cycle, `KeyCode::Char`
+pushed into the focused field's `String`) rather than inventing a new
+pattern:
+
+```rust
+pub enum YoutubeModal {
+    EnteringUrl { url_input: String, error: Option<String> },
+    Fetching { url: String },
+    ConfirmingVideo { url: String, info: VideoInfo },
+    EditingFields(YoutubeFieldsModal),
+    ResolvingCollision { fields: YoutubeFieldsModal, existing_path: PathBuf },
+    Downloading { file_name: String },
+}
+
+pub struct YoutubeFieldsModal {
+    pub url: String,
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub directory: String,
+    pub file_name: String,
+    pub file_name_overridden: bool,
+    pub focused: YoutubeField,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum YoutubeField { Title, Artist, Album, Directory, FileName }
+```
+
+- [ ] `YoutubeField` gets `ALL`/`label`/`next`/`prev`/`value`/`value_mut`
+  exactly like `MetadataField` (`tui/src/app/state.rs`) — reuse the
+  existing `cycle()` helper, don't write a second one.
+- [ ] `file_name_overridden` starts `false` (filename is auto-derived from
+  Title+Artist via `generate_file_name` on every edit to either field).
+  Typing directly into the Filename field sets it to `true`, which stops
+  the auto-sync until the field is cleared back to empty. Same shape as the
+  existing `dir_input`/`editing_dir` toggle in `DirScanState`.
+- [ ] Add `pub youtube_modal: Option<YoutubeModal>` (or equivalent) to
+  `ModalState` alongside `metadata_modal`.
+
+## Flow (end to end)
+
+1. **Keybind** — new `Action::OpenYoutubeModal` added to `keymap.rs`'s
+   `BINDINGS` table (the single source for both dispatch and displayed key
+   hints — don't hand-write a second hint string). Opens
+   `YoutubeModal::EnteringUrl`.
+2. User pastes/types the URL, `Enter` → spawn the background info-only
+   fetch (`fetch_info`), state → `Fetching`.
+3. Background thread sends `DownloadEvent::InfoReady(VideoInfo)` (or
+   `InfoError`). App polls this each tick, same as `Player::poll_events`.
+   On success, state → `ConfirmingVideo`, rendered read-only: title /
+   uploader / duration, with an explicit "is this the right video?" prompt.
+4. `y`/confirm → `EditingFields`, all of Title/Artist/Album/Directory/
+   FileName start **empty** — none of them are seeded from step 3.
+   `n`/`Esc` → back to `EnteringUrl` with the input cleared.
+5. User fills in fields, `Tab` cycling focus. Filename auto-regenerates
+   from Title+Artist while `file_name_overridden == false`.
+6. Confirm → validate `directory` stays under `library.root()` (see
+   above) → check if the resolved file already exists.
+   - If it exists → `ResolvingCollision` (see above), looping back into
+     `EditingFields` on "rename" or proceeding on "overwrite".
+   - If not → proceed directly.
+7. Spawn `download_audio` on a background thread with the final resolved
+   path. State → `Downloading`.
+8. `DownloadEvent::DownloadComplete(path)` (or `DownloadError`) polled each
+   tick. On success: `Metadata::write(&path, &edits)` →
+   `Song::load(&path)` → `Library::insert(song)` (see above) → close the
+   modal, select the newly inserted song.
+
+## Config (`tui/src/config.rs`)
+
+- [ ] New functions alongside the existing `data_dir()`/`cache_dir()`/
+  `scan_cache_path()`/`playlists_path()`: something like
+  `youtube_binaries_dir() -> Option<PathBuf>` (under `cache_dir()`) for
+  where `yt-dlp`/`ffmpeg` get cached. Resolved here in `tui`, passed into
+  `core::youtube::fetch_info`/`download_audio` as parameters — `core` stays
+  UI-independent, matching the existing split (same reasoning as
+  `Library::scan(root, cache_path)` taking its cache path as an argument).
+
+## Decisions already made (do not re-litigate without asking)
+
+- MP3 only, for now — no format choice in the modal.
+- Filename generation always has a working override via the Filename
+  field; no fallback placeholder text needed for empty inputs.
+- Word-splitting boundary for filename generation is whitespace **and**
+  hyphens, not apostrophes — see the two worked examples above.
+- Info-first-then-download-second: the user must see and confirm the
+  resolved video before any download starts.
+- Title/Artist/Album are always hand-typed, never pulled from yt-dlp.
+- The directory field is a hard constraint (must resolve under
+  `library.root()`), not just a default suggestion.
+- On a filename collision, ask the user (overwrite vs. rename) — never
+  silently pick one.
+
+## Testing
+
+- [ ] `generate_file_name` — sentence-named pure-function tests in
+  `core/tests/core_tests.rs`, no network needed (see above).
+- [ ] `Library::insert` — collision behavior (`Collision` vs `Inserted`),
+  mirroring the existing `insert_song` scan-time tests if any exist.
+- [ ] Directory validation — path-escape rejection (`..`, absolute paths)
+  as pure-function tests, no filesystem needed beyond a tempdir.
+- [ ] Real yt-dlp network calls (`fetch_info`, `download_audio`) are not
+  suitable for the normal `cargo test --workspace` run — mark them
+  `#[ignore]` for manual/local verification only.
+- [ ] Per `CLAUDE.md`: full `cargo test --workspace` must stay green before
+  this is considered done, and `cargo build --features youtube` must be
+  checked in addition to the default build.
