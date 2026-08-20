@@ -79,6 +79,18 @@ fn harness() -> Harness {
     Harness { _dir: dir, app }
 }
 
+fn empty_harness() -> Harness {
+    let dir = tempfile::TempDir::new().unwrap();
+    let root = dir.path().join("music");
+    std::fs::create_dir_all(&root).unwrap();
+
+    let (library, _) = Library::scan(&root, dir.path().join("cache.bin")).unwrap();
+    let (playlists, _) = PlaylistStore::load(dir.path().join("playlists"), &library);
+    let app = App::new(library, playlists, Backend::null());
+
+    Harness { _dir: dir, app }
+}
+
 fn key(c: char) -> KeyEvent {
     KeyEvent::from(KeyCode::Char(c))
 }
@@ -472,6 +484,50 @@ fn a_queues_the_selected_song_next() {
     h.app.on_key(key('a'));
 
     assert_eq!(h.app.queue.priority_queue().front(), Some(&id));
+}
+
+#[test]
+fn b_with_no_previous_track_shows_a_status_message() {
+    let mut h = empty_harness();
+    h.app.on_key(key('b'));
+    assert!(h.app.status.text.contains("no previous track"));
+}
+
+#[test]
+fn enter_with_no_song_selected_shows_a_status_message() {
+    let mut h = harness();
+    h.app.library_panel.list_state.select(None);
+    h.app.on_key(special(KeyCode::Enter));
+    assert!(h.app.status.text.contains("select a song first"));
+}
+
+#[test]
+fn lowercase_a_with_no_song_selected_shows_a_status_message() {
+    let mut h = harness();
+    h.app.library_panel.list_state.select(None);
+    h.app.on_key(key('a'));
+    assert!(h.app.status.text.contains("select a song first"));
+}
+
+#[test]
+fn shift_a_with_no_song_selected_shows_a_status_message() {
+    let mut h = harness();
+    h.app.library_panel.list_state.select(None);
+    h.app.on_key(key('A'));
+    assert!(h.app.status.text.contains("select a song first"));
+}
+
+#[test]
+fn entering_a_playlist_shows_a_status_message() {
+    let mut h = harness();
+    let id = h.app.playlists.create("Mix");
+
+    h.app.panel = Panel::Playlists;
+    h.app.playlist_panel.list_state.select(Some(0));
+    h.app.on_key(special(KeyCode::Enter));
+
+    assert_eq!(h.app.playlist_panel.view, PlaylistView::Viewing(id));
+    assert!(h.app.status.text.contains("viewing \"Mix\""));
 }
 
 #[test]

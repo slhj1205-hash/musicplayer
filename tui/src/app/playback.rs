@@ -50,7 +50,7 @@ impl App {
                     StatusKind::Info,
                 );
             }
-            None => {}
+            None => self.set_status("select a song first", StatusKind::Info),
         }
     }
 
@@ -64,6 +64,8 @@ impl App {
         self.playlist_panel.list_state = ListState::default();
         let target = self.visible_rows().iter().position(|r| matches!(r, Row::Song(_, _)));
         self.playlist_panel.list_state.select(target);
+        let name = self.playlists.get(id).map(|p| p.name().to_string()).unwrap_or_default();
+        self.set_status(format!("viewing \"{name}\""), StatusKind::Info);
     }
 
     pub(super) fn play_selected_in_playlist(&mut self, id: PlaylistId) {
@@ -85,7 +87,7 @@ impl App {
                     StatusKind::Info,
                 );
             }
-            None => {}
+            None => self.set_status("select a song first", StatusKind::Info),
         }
     }
 
@@ -104,8 +106,9 @@ impl App {
     }
 
     pub(super) fn go_back(&mut self) {
-        if let Some(id) = self.queue.previous() {
-            self.play_current(id);
+        match self.queue.previous() {
+            Some(id) => self.play_current(id),
+            None => self.set_status("no previous track", StatusKind::Info),
         }
     }
 
@@ -149,7 +152,7 @@ impl App {
                     StatusKind::Info,
                 );
             }
-            None => {}
+            None => self.set_status("select a song first", StatusKind::Info),
         }
     }
 }

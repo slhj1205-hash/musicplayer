@@ -46,7 +46,7 @@ impl App {
                     StatusKind::Info,
                 );
             }
-            None => {}
+            None => self.set_status("select a song first", StatusKind::Info),
         }
     }
 
