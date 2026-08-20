@@ -836,3 +836,21 @@ fn library_insert_reports_a_collision_without_replacing_the_existing_song() {
     assert_eq!(outcome, InsertOutcome::Collision { existing: id });
     assert_eq!(library.len(), 1);
 }
+
+#[test]
+fn queue_play_id_finds_a_song_inserted_after_construction() {
+    let dir = TempDir::new().unwrap();
+    let existing = write_song(dir.path(), "one.wav", "One", "Artist", "Album");
+    let existing_song = Song::load(&existing).unwrap();
+    let existing_id = existing_song.id();
+
+    let mut queue = Queue::new(vec![existing_id]);
+
+    let downloaded = write_song(dir.path(), "two.wav", "Two", "Artist", "Album");
+    let downloaded_song = Song::load(&downloaded).unwrap();
+    let downloaded_id = downloaded_song.id();
+    queue.insert(downloaded_id);
+
+    assert_eq!(queue.play_id(downloaded_id), Some(downloaded_id));
+    assert_eq!(queue.current_id(), Some(downloaded_id));
+}

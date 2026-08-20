@@ -32,6 +32,12 @@ impl Queue {
         Queue::new(playlist.songs().to_vec())
     }
 
+    pub fn insert(&mut self, id: SongId) {
+        let index = self.songs.len();
+        self.songs.push(id);
+        self.order.push(index);
+    }
+
     pub fn len(&self) -> usize {
         self.songs.len()
     }
