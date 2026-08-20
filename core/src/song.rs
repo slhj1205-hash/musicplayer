@@ -14,7 +14,7 @@ use lofty::{
     config::WriteOptions,
     file::{AudioFile, TaggedFileExt},
     probe::Probe,
-    tag::{items::Timestamp, Accessor, Tag},
+    tag::{items::Timestamp, Accessor, ItemKey, Tag},
 };
 
 pub const SUPPORTED_EXTENSIONS: &[&str] = &[
@@ -64,6 +64,10 @@ impl fmt::Display for SongId {
     }
 }
 
+pub fn needs_romanization(text: &str) -> bool {
+    !text.is_ascii()
+}
+
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Metadata {
     pub title: Option<Arc<str>>,
@@ -74,6 +78,8 @@ pub struct Metadata {
     #[serde(with = "timestamp_serde")]
     pub date: Option<Timestamp>,
     pub duration: Duration,
+    pub title_sort: Option<Arc<str>>,
+    pub artist_sort: Option<Arc<str>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -84,6 +90,8 @@ pub struct MetadataEdits {
     pub genre: String,
     pub track: String,
     pub date: String,
+    pub title_sort: String,
+    pub artist_sort: String,
 }
 
 impl MetadataEdits {
@@ -95,6 +103,8 @@ impl MetadataEdits {
             genre: metadata.genre.as_deref().unwrap_or_default().to_string(),
             track: metadata.track.map(|t| t.to_string()).unwrap_or_default(),
             date: metadata.date.map(|d| d.to_string()).unwrap_or_default(),
+            title_sort: metadata.title_sort.as_deref().unwrap_or_default().to_string(),
+            artist_sort: metadata.artist_sort.as_deref().unwrap_or_default().to_string(),
         }
     }
 }
@@ -104,6 +114,14 @@ fn set_text(tag: &mut Tag, value: &str, set: fn(&mut Tag, String), remove: fn(&m
         remove(tag);
     } else {
         set(tag, value.to_string());
+    }
+}
+
+fn set_sort_field(tag: &mut Tag, value: &str, key: ItemKey) {
+    if value.is_empty() {
+        tag.remove_key(key);
+    } else {
+        tag.insert_text(key, value.to_string());
     }
 }
 
@@ -178,6 +196,8 @@ impl Metadata {
         set_text(tag, edits.artist.trim(), Tag::set_artist, Tag::remove_artist);
         set_text(tag, edits.album.trim(), Tag::set_album, Tag::remove_album);
         set_text(tag, edits.genre.trim(), Tag::set_genre, Tag::remove_genre);
+        set_sort_field(tag, edits.title_sort.trim(), ItemKey::TrackTitleSortOrder);
+        set_sort_field(tag, edits.artist_sort.trim(), ItemKey::TrackArtistSortOrder);
         match track {
             Some(track) => tag.set_track(track),
             None => tag.remove_track(),
@@ -202,6 +222,8 @@ impl Metadata {
             track: tag.and_then(|t| t.track()),
             date: tag.and_then(|t| t.date()),
             duration: tf.properties().duration(),
+            title_sort: tag.and_then(|t| t.get_string(ItemKey::TrackTitleSortOrder)).map(Arc::from),
+            artist_sort: tag.and_then(|t| t.get_string(ItemKey::TrackArtistSortOrder)).map(Arc::from),
         }
     }
 }
@@ -215,14 +237,18 @@ struct SortKeys {
     title: Box<str>,
     artist: Box<str>,
     album: Box<str>,
+    title_sort: Option<Box<str>>,
+    artist_sort: Option<Box<str>>,
 }
 
 impl SortKeys {
-    fn build(title: &str, artist: &str, album: &str) -> SortKeys {
+    fn build(title: &str, artist: &str, album: &str, title_sort: Option<&str>, artist_sort: Option<&str>) -> SortKeys {
         SortKeys {
             title: title.chars().flat_map(char::to_lowercase).collect(),
             artist: artist.chars().flat_map(char::to_lowercase).collect(),
             album: album.chars().flat_map(char::to_lowercase).collect(),
+            title_sort: title_sort.map(|s| s.chars().flat_map(char::to_lowercase).collect()),
+            artist_sort: artist_sort.map(|s| s.chars().flat_map(char::to_lowercase).collect()),
         }
     }
 
@@ -234,6 +260,12 @@ impl SortKeys {
     }
     fn album(&self) -> &str {
         &self.album
+    }
+    fn title_sort(&self) -> Option<&str> {
+        self.title_sort.as_deref()
+    }
+    fn artist_sort(&self) -> Option<&str> {
+        self.artist_sort.as_deref()
     }
 }
 
@@ -282,7 +314,13 @@ impl Song {
         let title = metadata.title.as_deref().unwrap_or_else(|| stem_of(&path));
         let artist = metadata.artist.as_deref().unwrap_or(UNKNOWN_ARTIST);
         let album = metadata.album.as_deref().unwrap_or(UNKNOWN_ALBUM);
-        let keys = Arc::new(SortKeys::build(title, artist, album));
+        let keys = Arc::new(SortKeys::build(
+            title,
+            artist,
+            album,
+            metadata.title_sort.as_deref(),
+            metadata.artist_sort.as_deref(),
+        ));
 
         Song { id, path, metadata: Arc::new(metadata), keys, mtime_secs }
     }
@@ -354,7 +392,14 @@ impl Song {
         let album = fuzzy::subsequence_score(term, album_field)
             .map(|s| fuzzy::normalize_by_length(s, album_field.chars().count()));
 
-        [title, artist, album].into_iter().flatten().max()
+        let title_sort = self.keys.title_sort().and_then(|field| {
+            fuzzy::subsequence_score(term, field).map(|s| fuzzy::normalize_by_length(s, field.chars().count()) * 3 / 2)
+        });
+        let artist_sort = self.keys.artist_sort().and_then(|field| {
+            fuzzy::subsequence_score(term, field).map(|s| fuzzy::normalize_by_length(s, field.chars().count()))
+        });
+
+        [title, artist, album, title_sort, artist_sort].into_iter().flatten().max()
     }
 
     pub fn fuzzy_score(&self, terms: &[&str]) -> Option<u32> {

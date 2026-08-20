@@ -10,7 +10,7 @@ use crate::app::{App, MetadataField};
 
 use super::{centered_rect, dim_area, modal_block, modal_body_style};
 
-const WIDTH: u16 = 52;
+const WIDTH: u16 = 60;
 
 fn label_style() -> Style {
     Style::new().fg(tailwind::SLATE.c400)
@@ -33,13 +33,14 @@ pub fn render(app: &App, full_area: Rect, buf: &mut Buffer) {
 
     let Some(modal) = &app.modal.metadata_modal else { return };
 
-    let mut lines: Vec<Line> = Vec::with_capacity(MetadataField::ALL.len() + 5);
+    let visible = MetadataField::visible(&modal.edits);
+    let mut lines: Vec<Line> = Vec::with_capacity(visible.len() + 5);
     lines.push(Line::raw(""));
 
-    for &field in MetadataField::ALL {
+    for field in visible {
         let focused = field == modal.focused;
         let cursor = if focused { "▏" } else { "" };
-        let label = format!("{:<7}", field.label());
+        let label = format!("{:<16}", field.label());
         lines.push(Line::from(vec![
             Span::styled(label, label_style()),
             Span::styled(format!("{}{cursor}", field.value(&modal.edits)), value_style(focused)),

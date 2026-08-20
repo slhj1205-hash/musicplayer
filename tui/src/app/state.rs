@@ -5,7 +5,7 @@ use std::{
 
 use ratatui::widgets::ListState;
 
-use lyre_core::{youtube::VideoInfo, MetadataEdits, PlaylistId, SongId};
+use lyre_core::{needs_romanization, youtube::VideoInfo, MetadataEdits, PlaylistId, SongId};
 
 #[derive(Default)]
 pub struct DirScanState {
@@ -176,7 +176,9 @@ pub struct SongModal {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MetadataField {
     Title,
+    TitleSort,
     Artist,
+    ArtistSort,
     Album,
     Genre,
     Track,
@@ -186,17 +188,33 @@ pub enum MetadataField {
 impl MetadataField {
     pub const ALL: &'static [MetadataField] = &[
         MetadataField::Title,
+        MetadataField::TitleSort,
         MetadataField::Artist,
+        MetadataField::ArtistSort,
         MetadataField::Album,
         MetadataField::Genre,
         MetadataField::Track,
         MetadataField::Date,
     ];
 
+    pub fn visible(edits: &MetadataEdits) -> Vec<MetadataField> {
+        Self::ALL.iter().copied().filter(|field| field.is_visible(edits)).collect()
+    }
+
+    fn is_visible(&self, edits: &MetadataEdits) -> bool {
+        match self {
+            MetadataField::TitleSort => needs_romanization(&edits.title),
+            MetadataField::ArtistSort => needs_romanization(&edits.artist),
+            _ => true,
+        }
+    }
+
     pub fn label(&self) -> &'static str {
         match self {
             MetadataField::Title => "Title",
+            MetadataField::TitleSort => "Title (roman.)",
             MetadataField::Artist => "Artist",
+            MetadataField::ArtistSort => "Artist (roman.)",
             MetadataField::Album => "Album",
             MetadataField::Genre => "Genre",
             MetadataField::Track => "Track",
@@ -204,18 +222,20 @@ impl MetadataField {
         }
     }
 
-    pub fn next(self) -> MetadataField {
-        cycle(Self::ALL, self, 1)
+    pub fn next(self, edits: &MetadataEdits) -> MetadataField {
+        cycle(&Self::visible(edits), self, 1)
     }
 
-    pub fn prev(self) -> MetadataField {
-        cycle(Self::ALL, self, -1)
+    pub fn prev(self, edits: &MetadataEdits) -> MetadataField {
+        cycle(&Self::visible(edits), self, -1)
     }
 
     pub fn value<'a>(&self, edits: &'a MetadataEdits) -> &'a str {
         match self {
             MetadataField::Title => &edits.title,
+            MetadataField::TitleSort => &edits.title_sort,
             MetadataField::Artist => &edits.artist,
+            MetadataField::ArtistSort => &edits.artist_sort,
             MetadataField::Album => &edits.album,
             MetadataField::Genre => &edits.genre,
             MetadataField::Track => &edits.track,
@@ -226,7 +246,9 @@ impl MetadataField {
     pub fn value_mut<'a>(&self, edits: &'a mut MetadataEdits) -> &'a mut String {
         match self {
             MetadataField::Title => &mut edits.title,
+            MetadataField::TitleSort => &mut edits.title_sort,
             MetadataField::Artist => &mut edits.artist,
+            MetadataField::ArtistSort => &mut edits.artist_sort,
             MetadataField::Album => &mut edits.album,
             MetadataField::Genre => &mut edits.genre,
             MetadataField::Track => &mut edits.track,

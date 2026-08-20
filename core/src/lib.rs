@@ -14,4 +14,4 @@ pub use youtube::generate_file_name;
 pub use player::{NullBackend, Player};
 pub use playlist::{Playlist, PlaylistId, PlaylistStore};
 pub use queue::Queue;
-pub use song::{Metadata, MetadataEdits, Song, SongId};
+pub use song::{needs_romanization, Metadata, MetadataEdits, Song, SongId};

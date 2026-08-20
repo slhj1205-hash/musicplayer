@@ -347,12 +347,12 @@ impl App {
         match key.code {
             KeyCode::Esc => {}
             KeyCode::Tab | KeyCode::Down => {
-                modal.focused = modal.focused.next();
+                modal.focused = modal.focused.next(&modal.edits);
                 modal.error = None;
                 self.modal.metadata_modal = Some(modal);
             }
             KeyCode::BackTab | KeyCode::Up => {
-                modal.focused = modal.focused.prev();
+                modal.focused = modal.focused.prev(&modal.edits);
                 modal.error = None;
                 self.modal.metadata_modal = Some(modal);
             }

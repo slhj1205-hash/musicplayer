@@ -62,6 +62,8 @@ impl App {
             genre: String::new(),
             track: String::new(),
             date: String::new(),
+            title_sort: String::new(),
+            artist_sort: String::new(),
         };
 
         if let Err(e) = Metadata::write(&path, &edits) {

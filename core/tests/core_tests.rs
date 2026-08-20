@@ -2,11 +2,12 @@ mod fixtures;
 
 use std::{path::Path, time::Duration};
 
-use fixtures::write_song;
+use fixtures::{write_song, write_untagged_song};
 use lyre_core::{
     fuzzy,
     generate_file_name,
     library::{InsertOutcome, Library},
+    needs_romanization,
     player::{AudioBackend, PlaybackState},
     playlist::PlaylistStore,
     queue::Queue,
@@ -158,6 +159,8 @@ fn metadata_write_round_trips_through_probe() {
         genre: "Synthwave".to_string(),
         track: "7".to_string(),
         date: "2024".to_string(),
+        title_sort: String::new(),
+        artist_sort: String::new(),
     };
     Metadata::write(&path, &edits).unwrap();
 
@@ -886,4 +889,108 @@ fn fuzzy_normalize_by_length_scores_shorter_fields_higher_for_the_same_raw_score
     let long = fuzzy::normalize_by_length(10, 40);
 
     assert!(short > long);
+}
+
+#[test]
+fn needs_romanization_is_false_for_any_ascii_text_including_punctuation() {
+    assert!(!needs_romanization("Cafe De Flore"));
+    assert!(!needs_romanization("Song #7 (Remix) - feat. Someone"));
+    assert!(!needs_romanization(""));
+}
+
+#[test]
+fn needs_romanization_is_true_for_non_ascii_characters() {
+    assert!(needs_romanization("夜明け"));
+    assert!(needs_romanization("Кино"));
+    assert!(needs_romanization("Café"), "accented Latin is still non-ASCII");
+    assert!(!needs_romanization("Cafe"), "the unaccented spelling stays false");
+}
+
+#[test]
+fn metadata_write_round_trips_romanized_title_and_artist_through_probe() {
+    let dir = TempDir::new().unwrap();
+    let path = write_untagged_song(dir.path(), "one.wav");
+
+    let edits = MetadataEdits {
+        title: "夜明け".to_string(),
+        artist: "アーティスト".to_string(),
+        album: "Album".to_string(),
+        genre: String::new(),
+        track: String::new(),
+        date: String::new(),
+        title_sort: "Yoake".to_string(),
+        artist_sort: "Artist".to_string(),
+    };
+    Metadata::write(&path, &edits).unwrap();
+
+    let metadata = Metadata::probe(&path).unwrap();
+    assert_eq!(metadata.title.as_deref(), Some("夜明け"));
+    assert_eq!(metadata.title_sort.as_deref(), Some("Yoake"));
+    assert_eq!(metadata.artist_sort.as_deref(), Some("Artist"));
+}
+
+#[test]
+fn metadata_write_of_an_empty_romanized_field_removes_it() {
+    let dir = TempDir::new().unwrap();
+    let path = write_untagged_song(dir.path(), "one.wav");
+
+    let with_sort = MetadataEdits {
+        title: "夜明け".to_string(),
+        artist: "Artist".to_string(),
+        album: "Album".to_string(),
+        genre: String::new(),
+        track: String::new(),
+        date: String::new(),
+        title_sort: "Yoake".to_string(),
+        artist_sort: String::new(),
+    };
+    Metadata::write(&path, &with_sort).unwrap();
+    assert_eq!(Metadata::probe(&path).unwrap().title_sort.as_deref(), Some("Yoake"));
+
+    let without_sort = MetadataEdits { title_sort: String::new(), ..with_sort };
+    Metadata::write(&path, &without_sort).unwrap();
+    assert_eq!(Metadata::probe(&path).unwrap().title_sort, None);
+}
+
+#[test]
+fn song_fuzzy_score_finds_a_song_by_its_romanized_title() {
+    let dir = TempDir::new().unwrap();
+    let path = write_untagged_song(dir.path(), "one.wav");
+
+    let edits = MetadataEdits {
+        title: "夜明け".to_string(),
+        artist: "Artist".to_string(),
+        album: "Album".to_string(),
+        genre: String::new(),
+        track: String::new(),
+        date: String::new(),
+        title_sort: "Yoake".to_string(),
+        artist_sort: String::new(),
+    };
+    Metadata::write(&path, &edits).unwrap();
+    let song = Song::load(&path).unwrap();
+
+    assert!(song.fuzzy_score(&["yoake"]).is_some(), "the romanized title must be searchable");
+    assert!(song.fuzzy_score(&["zzz"]).is_none());
+}
+
+#[test]
+fn song_sort_title_ignores_the_romanized_field() {
+    let dir = TempDir::new().unwrap();
+    let path = write_untagged_song(dir.path(), "one.wav");
+
+    let edits = MetadataEdits {
+        title: "夜明け".to_string(),
+        artist: "Artist".to_string(),
+        album: "Album".to_string(),
+        genre: String::new(),
+        track: String::new(),
+        date: String::new(),
+        title_sort: "Yoake".to_string(),
+        artist_sort: String::new(),
+    };
+    Metadata::write(&path, &edits).unwrap();
+    let song = Song::load(&path).unwrap();
+
+    assert_eq!(song.sort_title(), "夜明け", "romanization must not change what the list sorts by");
 }

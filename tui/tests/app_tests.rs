@@ -1,5 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use lyre_core::{Library, PlaylistStore};
+use lyre_core::{Library, MetadataEdits, PlaylistStore};
 use ratatui::{buffer::Buffer, layout::Rect, style::Style, widgets::Widget};
 
 use lyre_tui::{
@@ -348,8 +348,9 @@ fn metadata_modal_tab_and_shift_tab_cycle_through_every_field_and_wrap() {
     h.app.on_key(key('g'));
     h.app.on_key(special(KeyCode::Char('E')));
 
-    for &expected in MetadataField::ALL {
-        assert_eq!(h.app.modal.metadata_modal.as_ref().unwrap().focused, expected);
+    let visible = MetadataField::visible(&h.app.modal.metadata_modal.as_ref().unwrap().edits);
+    for expected in &visible {
+        assert_eq!(h.app.modal.metadata_modal.as_ref().unwrap().focused, *expected);
         h.app.on_key(special(KeyCode::Tab));
     }
     assert_eq!(
@@ -361,7 +362,7 @@ fn metadata_modal_tab_and_shift_tab_cycle_through_every_field_and_wrap() {
     h.app.on_key(special(KeyCode::BackTab));
     assert_eq!(
         h.app.modal.metadata_modal.as_ref().unwrap().focused,
-        *MetadataField::ALL.last().unwrap(),
+        *visible.last().unwrap(),
         "shift-tab from the first field must wrap back to the last"
     );
 }
@@ -411,7 +412,8 @@ fn metadata_modal_saving_a_non_numeric_track_keeps_the_modal_open_with_an_error(
     let Some(Row::Song(old_id, _)) = h.app.selected_row() else { panic!("expected a song row") };
 
     h.app.on_key(special(KeyCode::Char('E')));
-    for _ in 0..MetadataField::ALL.iter().position(|&f| f == MetadataField::Track).unwrap() {
+    let edits = h.app.modal.metadata_modal.as_ref().unwrap().edits.clone();
+    for _ in 0..MetadataField::visible(&edits).iter().position(|&f| f == MetadataField::Track).unwrap() {
         h.app.on_key(special(KeyCode::Tab));
     }
     for c in "not-a-number".chars() {
@@ -848,4 +850,40 @@ fn youtube_modal_auto_generates_the_file_name_from_title_and_artist_until_overri
         }
         _ => panic!("expected EditingFields"),
     }
+}
+
+#[test]
+fn metadata_field_visible_hides_the_romanized_fields_by_default() {
+    let edits = MetadataEdits::default();
+    let visible = MetadataField::visible(&edits);
+
+    assert!(!visible.contains(&MetadataField::TitleSort));
+    assert!(!visible.contains(&MetadataField::ArtistSort));
+}
+
+#[test]
+fn metadata_field_visible_shows_title_sort_only_when_the_title_needs_romanization() {
+    let edits = MetadataEdits { title: "夜明け".to_string(), ..MetadataEdits::default() };
+    let visible = MetadataField::visible(&edits);
+
+    assert!(visible.contains(&MetadataField::TitleSort));
+    assert!(!visible.contains(&MetadataField::ArtistSort));
+}
+
+#[test]
+fn metadata_modal_typing_a_non_ascii_title_reveals_the_title_sort_field_in_the_tab_order() {
+    let mut h = harness();
+    h.app.on_key(key('g'));
+    h.app.on_key(special(KeyCode::Char('E')));
+
+    for c in "夜明け".chars() {
+        h.app.on_key(key(c));
+    }
+
+    let modal = h.app.modal.metadata_modal.as_ref().unwrap();
+    let visible = MetadataField::visible(&modal.edits);
+    assert!(visible.contains(&MetadataField::TitleSort), "a non-ASCII title must reveal the romanized field");
+
+    h.app.on_key(special(KeyCode::Tab));
+    assert_eq!(h.app.modal.metadata_modal.as_ref().unwrap().focused, MetadataField::TitleSort);
 }
