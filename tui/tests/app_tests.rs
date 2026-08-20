@@ -1027,3 +1027,19 @@ fn youtube_modal_typing_a_non_ascii_artist_reveals_the_artist_sort_field_in_the_
         _ => panic!("expected EditingFields"),
     }
 }
+
+#[test]
+fn youtube_modal_confirming_a_video_prefills_the_directory_with_the_library_root() {
+    let mut h = harness();
+    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::ConfirmingVideo {
+        url: "https://example.com/watch?v=x".to_string(),
+        info: lyre_core::youtube::VideoInfo { title: "Some Title".to_string(), uploader: None, duration: None },
+    });
+
+    h.app.on_key(key('y'));
+
+    match h.app.modal.youtube_modal.as_ref().unwrap() {
+        lyre_tui::app::YoutubeModal::EditingFields(fields) => assert_eq!(fields.directory, "./"),
+        _ => panic!("expected EditingFields"),
+    }
+}

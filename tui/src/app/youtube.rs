@@ -142,7 +142,7 @@ impl App {
                         album: String::new(),
                         title_sort: String::new(),
                         artist_sort: String::new(),
-                        directory: String::new(),
+                        directory: "./".to_string(),
                         file_name: String::new(),
                         file_name_overridden: false,
                         focused: YoutubeField::Title,
