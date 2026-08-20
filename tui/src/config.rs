@@ -81,12 +81,7 @@ pub fn save_last_dir(dir: &Path) {
     let Ok(json) = serde_json::to_string_pretty(&config) else {
         return;
     };
-    if let Some(parent) = path.parent()
-        && let Err(e) = std::fs::create_dir_all(parent) {
-            eprintln!("warning: failed to create config directory: {e}");
-            return;
-        }
-    if let Err(e) = std::fs::write(path, json) {
+    if let Err(e) = lyre_core::atomic::write(&path, json.as_bytes()) {
         eprintln!("warning: failed to persist config: {e}");
     }
 }
