@@ -154,12 +154,10 @@ pub fn display_for(action: Action) -> &'static str {
 pub fn help_rows(section: Section) -> Vec<(String, &'static str)> {
     let mut rows: Vec<(String, &'static str)> = Vec::new();
     for b in BINDINGS.iter().filter(|b| b.section == section) {
-        if let Some(last) = rows.last_mut() {
-            if last.1 == b.desc {
-                last.0.push_str(" / ");
-                last.0.push_str(b.display);
-                continue;
-            }
+        if let Some(last) = rows.last_mut() && last.1 == b.desc {
+            last.0.push_str(" / ");
+            last.0.push_str(b.display);
+            continue;
         }
         rows.push((b.display.to_string(), b.desc));
     }
