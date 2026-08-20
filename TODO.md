@@ -161,34 +161,41 @@ Everything else in the original plan held up.
 - [ ] The `yt-dlp` crate is **GPL-3.0-only** (`license = "GPL-3.0-only"` in
   its own `Cargo.toml`). This repo currently has no `LICENSE` file and no
   `license` field in any `Cargo.toml`, so there's nothing formally in
-  conflict yet, but a GPL-3.0-only dependency — even an optional one gated
-  behind `--features youtube` — has real implications for how this project
-  can be licensed and redistributed once it does declare a license,
-  specifically for any distributed binary built with that feature on.
-  Confirm with the user whether that's acceptable before writing any code
-  against the crate, rather than discovering it after the feature exists.
+  conflict yet, but a GPL-3.0-only dependency has real implications for how
+  this project can be licensed and redistributed once it does declare a
+  license. Since this is now an unconditional dependency of every build (see
+  below), it applies to every distributed binary, not just an opt-in
+  variant. Confirm with the user whether that's acceptable before writing
+  any code against the crate, rather than discovering it after the fact.
 
 ## Dependency
 
-- [ ] Add the `yt-dlp` crate to `core/Cargo.toml` behind a new `youtube`
-  Cargo feature (`[features] youtube = ["dep:yt-dlp", "dep:tokio"]`), not as
-  an unconditional dependency. This still holds, but the weight is larger
-  than "pulls in tokio/reqwest" suggested — the crate's own dependency list
-  includes `moka` (in-memory cache, on by default), `id3`, `mp4ameta`,
-  `chrono`, `regex`, `uuid`, `zip`, `tar`, `xz2`, `sha2`, on top of
-  `tokio`/`reqwest`. Pin the version and trim its default features:
+- [ ] Add the `yt-dlp` crate to `core/Cargo.toml` as an **unconditional**
+  dependency — no Cargo feature gate. Every default `cargo build` includes
+  it; there is no youtube-less build variant.
   ```toml
   [dependencies]
-  yt-dlp = { version = "2.8.2", default-features = false, features = ["rustls"], optional = true }
+  yt-dlp = { version = "2.8.2", default-features = false, features = ["rustls"] }
+  tokio = { version = "1", features = ["rt"] }
   ```
-  `default-features = false` drops the `cache-memory` (moka) default, which
-  this one-shot per-download use case gets no benefit from — nothing here
-  calls `fetch_video_infos` twice for the same URL within a process
-  lifetime. `rustls` swaps `reqwest`'s TLS backend to a pure-Rust
-  implementation instead of pulling in a system OpenSSL dependency, which
-  fits a Rust workspace that otherwise has no C dependencies besides
-  GStreamer. Default `cargo build` stays as-is; `cargo build --features
-  youtube` opts in.
+  `default-features = false` still drops the `cache-memory` (moka) default,
+  which this one-shot per-download use case gets no benefit from — nothing
+  here calls `fetch_video_infos` twice for the same URL within a process
+  lifetime — and `rustls` still swaps `reqwest`'s TLS backend to a pure-Rust
+  implementation instead of a system OpenSSL dependency. Those two trims are
+  worth keeping regardless of the feature-gate decision.
+  **Explicitly noting the tradeoff being made here**, since it reverses this
+  file's own earlier reasoning: `CLAUDE.md`'s "Conventions" section points
+  to `fnv` being chosen over `DefaultHasher` specifically to keep the
+  dependency tree small, and the original draft of this plan extended that
+  reasoning to gating `yt-dlp` behind a feature. Making it unconditional
+  means every `cargo build` — including for people who will never touch
+  this feature — now pulls in `tokio`, `reqwest`, `id3`, `mp4ameta`,
+  `chrono`, `regex`, `uuid`, `zip`, `tar`, `xz2`, `sha2`, and takes on
+  the crate's own reported ~1–2 minute build time, on top of the existing
+  `libgstreamer1.0-dev` system requirement. If build time or binary size
+  regresses noticeably, a feature gate is the easy fix to revisit — but
+  per this instruction, ship unconditional first.
 
 ## `core/src/youtube.rs` — new module
 
@@ -514,5 +521,6 @@ pub enum YoutubeField { Title, Artist, Album, Directory, FileName }
   kind of thing that can silently degrade to "produces a file" without
   producing the *right kind* of file.
 - [ ] Per `CLAUDE.md`: full `cargo test --workspace` must stay green before
-  this is considered done, and `cargo build --features youtube` must be
-  checked in addition to the default build.
+  this is considered done. No separate feature-gated build to check — the
+  default `cargo build` and `cargo test --workspace` runs are the only
+  configuration, since `yt-dlp` is an unconditional dependency now.
