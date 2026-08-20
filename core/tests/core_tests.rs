@@ -994,3 +994,32 @@ fn song_sort_title_ignores_the_romanized_field() {
 
     assert_eq!(song.sort_title(), "夜明け", "romanization must not change what the list sorts by");
 }
+
+#[test]
+fn library_update_artist_sort_for_matching_applies_to_every_other_song_with_the_same_artist() {
+    let dir = TempDir::new().unwrap();
+    let cache_path = dir.path().join("cache.bin");
+
+    let a = write_untagged_song(dir.path(), "a.wav");
+    Metadata::write(&a, &MetadataEdits { artist: "Alpha".to_string(), ..MetadataEdits::default() }).unwrap();
+    let b = write_untagged_song(dir.path(), "b.wav");
+    Metadata::write(&b, &MetadataEdits { artist: "Alpha".to_string(), ..MetadataEdits::default() }).unwrap();
+    let c = write_untagged_song(dir.path(), "c.wav");
+    Metadata::write(&c, &MetadataEdits { artist: "Beta".to_string(), ..MetadataEdits::default() }).unwrap();
+
+    let (mut library, _) = Library::scan(dir.path(), &cache_path).unwrap();
+    let song_a = library.songs_by_path().find(|s| s.path() == a).unwrap().id();
+    let song_b = library.songs_by_path().find(|s| s.path() == b).unwrap().id();
+    let song_c = library.songs_by_path().find(|s| s.path() == c).unwrap().id();
+    let artist_key = library.get(song_a).unwrap().sort_artist().to_string();
+
+    assert_eq!(library.count_matching_artist(&artist_key, song_a), 1, "only song_b shares the artist");
+
+    let renames = library.update_artist_sort_for_matching(&artist_key, "Arufa", song_a);
+    assert_eq!(renames.len(), 1);
+    let (old_id, new_id) = renames[0];
+    assert_eq!(old_id, song_b);
+
+    assert_eq!(library.get(new_id).unwrap().metadata().artist_sort.as_deref(), Some("Arufa"));
+    assert_eq!(library.get(song_c).unwrap().metadata().artist_sort, None, "a different artist must be untouched");
+}

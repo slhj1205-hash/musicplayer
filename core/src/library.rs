@@ -151,6 +151,35 @@ impl Library {
         Ok(new_id)
     }
 
+    pub fn count_matching_artist(&self, artist_sort_key: &str, exclude: SongId) -> usize {
+        self.songs.values().filter(|s| s.id() != exclude && s.sort_artist() == artist_sort_key).count()
+    }
+
+    pub fn update_artist_sort_for_matching(
+        &mut self,
+        artist_sort_key: &str,
+        artist_sort_value: &str,
+        exclude: SongId,
+    ) -> Vec<(SongId, SongId)> {
+        let matching: Vec<SongId> = self
+            .songs
+            .values()
+            .filter(|s| s.id() != exclude && s.sort_artist() == artist_sort_key)
+            .map(Song::id)
+            .collect();
+
+        let mut renames = Vec::with_capacity(matching.len());
+        for id in matching {
+            let Some(song) = self.songs.get(&id) else { continue };
+            let mut edits = MetadataEdits::from_metadata(song.metadata());
+            edits.artist_sort = artist_sort_value.to_string();
+            if let Ok(new_id) = self.update_metadata(id, &edits) {
+                renames.push((id, new_id));
+            }
+        }
+        renames
+    }
+
     pub fn insert(&mut self, song: Song) -> InsertOutcome {
         let id = song.id();
         if let Some(existing) = self.songs.get(&id) {

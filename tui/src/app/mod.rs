@@ -23,8 +23,8 @@ use crate::Backend;
 pub use row_builder::RowCache;
 pub use state::{
     Category, ChooseActionField, DirScanState, LibraryPanelState, MetadataEditModal, MetadataField, ModalState,
-    Panel, PlaylistDisplayMode, PlaylistPanelState, PlaylistView, QueueSource, Row, SidePanel, Sort, SongModal,
-    StatusKind, StatusMessage, YoutubeField, YoutubeFieldsModal, YoutubeModal,
+    Panel, PlaylistDisplayMode, PlaylistPanelState, PlaylistView, QueueSource, RomanizedArtistConfirmModal, Row,
+    SidePanel, Sort, SongModal, StatusKind, StatusMessage, YoutubeField, YoutubeFieldsModal, YoutubeModal,
 };
 
 pub struct App {

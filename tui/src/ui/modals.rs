@@ -66,6 +66,22 @@ pub fn render_remove_confirm(app: &App, playlist_id: PlaylistId, song_id: SongId
     render_confirm(" Remove Song ", lines, 46, 8, full_area, buf);
 }
 
+pub fn render_romanized_artist_confirm(app: &App, full_area: Rect, buf: &mut Buffer) {
+    let Some(confirm) = &app.modal.romanized_artist_confirm else { return };
+
+    let plural = if confirm.count == 1 { "" } else { "s" };
+    let lines = vec![
+        Line::raw(""),
+        Line::from(format!("Apply \"{}\" as the romanized artist", confirm.value)).alignment(Alignment::Center),
+        Line::from(format!("to {} other song{plural} by {}?", confirm.count, confirm.artist_display))
+            .alignment(Alignment::Center),
+        Line::raw(""),
+        yes_no_line(),
+    ];
+
+    render_confirm(" Apply Romanized Artist ", lines, 54, 8, full_area, buf);
+}
+
 pub fn render_help_overlay(full_area: Rect, buf: &mut Buffer) {
     dim_area(full_area, buf);
 

@@ -65,6 +65,8 @@ impl Widget for &mut App {
             metadata_modal::render(self, area, buf);
         } else if self.modal.youtube_modal.is_some() {
             youtube_modal::render(self, area, buf);
+        } else if self.modal.romanized_artist_confirm.is_some() {
+            modals::render_romanized_artist_confirm(self, area, buf);
         }
     }
 }

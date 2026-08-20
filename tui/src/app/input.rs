@@ -30,6 +30,10 @@ impl App {
             self.handle_metadata_modal_key(key);
             return;
         }
+        if self.modal.romanized_artist_confirm.is_some() {
+            self.handle_romanized_artist_confirm_key(key);
+            return;
+        }
         if self.modal.youtube_modal.is_some() {
             self.handle_youtube_modal_key(key);
             return;
@@ -370,6 +374,16 @@ impl App {
             _ => {
                 self.modal.metadata_modal = Some(modal);
             }
+        }
+    }
+
+    fn handle_romanized_artist_confirm_key(&mut self, key: KeyEvent) {
+        let Some(confirm) = self.modal.romanized_artist_confirm.take() else { return };
+
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Enter => self.confirm_romanized_artist_apply(confirm),
+            KeyCode::Char('n') | KeyCode::Esc => {}
+            _ => self.modal.romanized_artist_confirm = Some(confirm),
         }
     }
 }

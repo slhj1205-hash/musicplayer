@@ -887,3 +887,77 @@ fn metadata_modal_typing_a_non_ascii_title_reveals_the_title_sort_field_in_the_t
     h.app.on_key(special(KeyCode::Tab));
     assert_eq!(h.app.modal.metadata_modal.as_ref().unwrap().focused, MetadataField::TitleSort);
 }
+
+fn open_metadata_modal_for_selected_song(h: &mut Harness) {
+    h.app.on_key(special(KeyCode::Char('E')));
+}
+
+#[test]
+fn saving_a_new_romanized_artist_prompts_to_apply_it_to_sibling_songs() {
+    let mut h = harness();
+    h.app.on_key(key('g'));
+    let Some(Row::Song(id, _)) = h.app.selected_row() else { panic!("expected a song row") };
+    assert_eq!(h.app.library.get(id).unwrap().artist(), "Alpha", "sanity check: selected an Alpha song");
+
+    open_metadata_modal_for_selected_song(&mut h);
+    h.app.modal.metadata_modal.as_mut().unwrap().edits.artist_sort = "Arufa".to_string();
+    h.app.on_key(special(KeyCode::Enter));
+
+    let confirm = h.app.modal.romanized_artist_confirm.as_ref().expect("must prompt when a sibling song shares the artist");
+    assert_eq!(confirm.artist_display, "Alpha");
+    assert_eq!(confirm.value, "Arufa");
+    assert_eq!(confirm.count, 1, "only one other Alpha song exists in the fixture");
+}
+
+#[test]
+fn saving_a_romanized_artist_with_no_siblings_does_not_prompt() {
+    let mut h = harness();
+    h.app.on_key(key('g'));
+
+    open_metadata_modal_for_selected_song(&mut h);
+    {
+        let modal = h.app.modal.metadata_modal.as_mut().unwrap();
+        modal.edits.artist = "CompletelyUniqueArtist".to_string();
+        modal.edits.artist_sort = "Yunikuu".to_string();
+    }
+    h.app.on_key(special(KeyCode::Enter));
+
+    assert!(
+        h.app.modal.romanized_artist_confirm.is_none(),
+        "an artist with no other songs must not trigger the confirmation"
+    );
+}
+
+#[test]
+fn declining_the_romanized_artist_prompt_leaves_the_library_untouched() {
+    let mut h = harness();
+    h.app.on_key(key('g'));
+    let songs_before = h.app.library.len();
+
+    open_metadata_modal_for_selected_song(&mut h);
+    h.app.modal.metadata_modal.as_mut().unwrap().edits.artist_sort = "Arufa".to_string();
+    h.app.on_key(special(KeyCode::Enter));
+    assert!(h.app.modal.romanized_artist_confirm.is_some());
+
+    h.app.on_key(key('n'));
+
+    assert!(h.app.modal.romanized_artist_confirm.is_none());
+    assert_eq!(h.app.library.len(), songs_before, "declining must not change how many songs exist");
+}
+
+#[test]
+fn accepting_the_romanized_artist_prompt_applies_it_and_closes_the_modal() {
+    let mut h = harness();
+    h.app.on_key(key('g'));
+    let songs_before = h.app.library.len();
+
+    open_metadata_modal_for_selected_song(&mut h);
+    h.app.modal.metadata_modal.as_mut().unwrap().edits.artist_sort = "Arufa".to_string();
+    h.app.on_key(special(KeyCode::Enter));
+    assert!(h.app.modal.romanized_artist_confirm.is_some());
+
+    h.app.on_key(key('y'));
+
+    assert!(h.app.modal.romanized_artist_confirm.is_none());
+    assert_eq!(h.app.library.len(), songs_before, "applying must not add or remove songs, only re-tag them");
+}

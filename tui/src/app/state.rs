@@ -46,6 +46,7 @@ pub struct ModalState {
     pub song_modal: Option<SongModal>,
     pub metadata_modal: Option<MetadataEditModal>,
     pub youtube_modal: Option<YoutubeModal>,
+    pub romanized_artist_confirm: Option<RomanizedArtistConfirmModal>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -260,8 +261,17 @@ impl MetadataField {
 pub struct MetadataEditModal {
     pub song: SongId,
     pub edits: MetadataEdits,
+    pub original_artist_sort: String,
     pub focused: MetadataField,
     pub error: Option<String>,
+}
+
+pub struct RomanizedArtistConfirmModal {
+    pub artist_display: String,
+    pub artist_sort_key: String,
+    pub value: String,
+    pub reference_song: SongId,
+    pub count: usize,
 }
 
 pub enum YoutubeModal {
