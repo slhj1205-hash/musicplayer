@@ -4,12 +4,13 @@ use std::{path::Path, time::Duration};
 
 use fixtures::write_song;
 use lyre_core::{
-    library::Library,
+    generate_file_name,
+    library::{InsertOutcome, Library},
     player::{AudioBackend, PlaybackState},
     playlist::PlaylistStore,
     queue::Queue,
     scan_cache::{Entry, Probed, ScanCache},
-    song::{is_supported_audio, Metadata, MetadataEdits, SongId},
+    song::{is_supported_audio, Metadata, MetadataEdits, Song, SongId},
     NullBackend, Player,
 };
 use tempfile::TempDir;
@@ -781,4 +782,57 @@ fn song_fuzzy_term_score_of_an_empty_term_matches_everything_with_zero_score() {
     let song = lyre_core::song::Song::load(&path).unwrap();
 
     assert_eq!(song.fuzzy_term_score(""), Some(0));
+}
+
+#[test]
+fn generate_file_name_capitalizes_each_word_and_strips_apostrophes() {
+    assert_eq!(generate_file_name("John leSmith's", "38 cats"), "JohnLeSmiths-38Cats.mp3");
+}
+
+#[test]
+fn generate_file_name_splits_words_on_hyphens_but_not_apostrophes() {
+    assert_eq!(generate_file_name("Rock-n-Roll", "Don't Stop"), "RockNRoll-DontStop.mp3");
+}
+
+#[test]
+fn generate_file_name_drops_a_word_made_entirely_of_punctuation() {
+    assert_eq!(generate_file_name("!!!", "Title"), "-Title.mp3");
+}
+
+#[test]
+fn generate_file_name_handles_an_empty_artist_or_title() {
+    assert_eq!(generate_file_name("", "Title"), "-Title.mp3");
+    assert_eq!(generate_file_name("Artist", ""), "Artist-.mp3");
+    assert_eq!(generate_file_name("", ""), "-.mp3");
+}
+
+#[test]
+fn library_insert_adds_a_new_song_and_reports_inserted() {
+    let dir = TempDir::new().unwrap();
+    let path = write_song(dir.path(), "one.wav", "One", "Artist", "Album");
+    let song = Song::load(&path).unwrap();
+    let id = song.id();
+
+    let mut library = Library::empty(dir.path());
+    let outcome = library.insert(song);
+
+    assert_eq!(outcome, InsertOutcome::Inserted(id));
+    assert!(library.contains(id));
+    assert_eq!(library.ids_by_path(), &[id]);
+}
+
+#[test]
+fn library_insert_reports_a_collision_without_replacing_the_existing_song() {
+    let dir = TempDir::new().unwrap();
+    let path = write_song(dir.path(), "one.wav", "One", "Artist", "Album");
+    let first = Song::load(&path).unwrap();
+    let second = Song::load(&path).unwrap();
+    let id = first.id();
+
+    let mut library = Library::empty(dir.path());
+    library.insert(first);
+    let outcome = library.insert(second);
+
+    assert_eq!(outcome, InsertOutcome::Collision { existing: id });
+    assert_eq!(library.len(), 1);
 }

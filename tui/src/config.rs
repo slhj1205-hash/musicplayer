@@ -45,6 +45,10 @@ pub fn cache_dir() -> Option<PathBuf> {
     None
 }
 
+pub fn youtube_binaries_dir() -> Option<PathBuf> {
+    cache_dir().map(|dir| dir.join("yt-dlp"))
+}
+
 pub fn scan_cache_path(root: &Path) -> PathBuf {
     use std::hash::{Hash, Hasher};
 

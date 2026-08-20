@@ -8,6 +8,7 @@ mod playlists;
 mod rows;
 mod song_modal;
 mod style;
+mod youtube_modal;
 
 use ratatui::{
     buffer::Buffer,
@@ -62,6 +63,8 @@ impl Widget for &mut App {
             song_modal::render(self, area, buf);
         } else if self.modal.metadata_modal.is_some() {
             metadata_modal::render(self, area, buf);
+        } else if self.modal.youtube_modal.is_some() {
+            youtube_modal::render(self, area, buf);
         }
     }
 }

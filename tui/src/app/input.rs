@@ -30,6 +30,10 @@ impl App {
             self.handle_metadata_modal_key(key);
             return;
         }
+        if self.modal.youtube_modal.is_some() {
+            self.handle_youtube_modal_key(key);
+            return;
+        }
         if self.dir.editing_dir {
             self.handle_dir_input_key(key);
             return;
@@ -119,6 +123,7 @@ impl App {
             Some(Action::QueueNext) => self.queue_selected_next(),
             Some(Action::OpenSongModal) => self.open_song_modal(),
             Some(Action::OpenMetadataEditModal) => self.open_metadata_modal(),
+            Some(Action::OpenYoutubeModal) => self.open_youtube_modal(),
             Some(Action::RemoveFromPlaylist) => self.open_remove_confirm(),
             Some(Action::ChangeDirectory) => {
                 self.dir.dir_input = self.library.root().display().to_string();

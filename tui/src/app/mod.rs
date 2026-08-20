@@ -5,6 +5,7 @@ mod panels;
 mod playback;
 mod row_builder;
 mod state;
+mod youtube;
 
 use std::{
     path::PathBuf,
@@ -23,7 +24,7 @@ pub use row_builder::RowCache;
 pub use state::{
     Category, ChooseActionField, DirScanState, LibraryPanelState, MetadataEditModal, MetadataField, ModalState,
     Panel, PlaylistDisplayMode, PlaylistPanelState, PlaylistView, QueueSource, Row, SidePanel, Sort, SongModal,
-    StatusKind, StatusMessage,
+    StatusKind, StatusMessage, YoutubeField, YoutubeFieldsModal, YoutubeModal,
 };
 
 pub struct App {
@@ -47,6 +48,9 @@ pub struct App {
     pub library_panel: LibraryPanelState,
     pub playlist_panel: PlaylistPanelState,
     pub modal: ModalState,
+
+    youtube_tx: std::sync::mpsc::Sender<youtube::DownloadEvent>,
+    youtube_rx: std::sync::mpsc::Receiver<youtube::DownloadEvent>,
 }
 
 impl App {
@@ -64,6 +68,8 @@ impl App {
             StatusKind::Success,
         );
         let dir = DirScanState { dir_input: library.root().display().to_string(), ..Default::default() };
+
+        let (youtube_tx, youtube_rx) = youtube::channel();
 
         App {
             library,
@@ -83,6 +89,8 @@ impl App {
             library_panel,
             playlist_panel: PlaylistPanelState::default(),
             modal: ModalState::default(),
+            youtube_tx,
+            youtube_rx,
         }
     }
 
@@ -116,6 +124,10 @@ impl App {
             }
 
             if self.drain_player_events() {
+                needs_redraw = true;
+            }
+
+            if self.drain_youtube_events() {
                 needs_redraw = true;
             }
         }

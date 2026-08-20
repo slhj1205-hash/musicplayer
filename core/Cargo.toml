@@ -17,6 +17,7 @@ serde.workspace = true
 serde_json.workspace = true
 gstreamer.workspace = true
 fnv.workspace = true
-
-[dev-dependencies]
+yt-dlp.workspace = true
+tokio.workspace = true
 tempfile.workspace = true
+

@@ -767,3 +767,85 @@ fn marquee_window_never_exceeds_the_visible_width_for_wide_characters() {
 fn marquee_window_zero_width_returns_empty() {
     assert_eq!(marquee_window("Beacon", 0), "");
 }
+
+#[test]
+fn lowercase_y_opens_the_youtube_modal_entering_url() {
+    let mut h = harness();
+    h.app.on_key(key('y'));
+
+    let modal = h.app.modal.youtube_modal.as_ref().expect("<y> must open the youtube modal");
+    assert!(matches!(modal, lyre_tui::app::YoutubeModal::EnteringUrl { url_input, error } if url_input.is_empty() && error.is_none()));
+}
+
+#[test]
+fn youtube_modal_entering_url_accumulates_typed_characters_and_esc_cancels() {
+    let mut h = harness();
+    h.app.on_key(key('y'));
+    h.app.on_key(key('h'));
+    h.app.on_key(key('i'));
+
+    match h.app.modal.youtube_modal.as_ref().unwrap() {
+        lyre_tui::app::YoutubeModal::EnteringUrl { url_input, .. } => assert_eq!(url_input, "hi"),
+        _ => panic!("expected EnteringUrl"),
+    }
+
+    h.app.on_key(special(KeyCode::Esc));
+    assert!(h.app.modal.youtube_modal.is_none());
+}
+
+#[test]
+fn youtube_modal_rejects_a_directory_that_escapes_the_library_root() {
+    let mut h = harness();
+    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::EditingFields(lyre_tui::app::YoutubeFieldsModal {
+        url: "https://example.com/watch?v=x".to_string(),
+        title: "Some Title".to_string(),
+        artist: "Some Artist".to_string(),
+        album: String::new(),
+        directory: "../escape".to_string(),
+        file_name: "SomeArtist-SomeTitle.mp3".to_string(),
+        file_name_overridden: true,
+        focused: lyre_tui::app::YoutubeField::Directory,
+        error: None,
+    }));
+
+    h.app.on_key(special(KeyCode::Enter));
+
+    match h.app.modal.youtube_modal.as_ref().expect("modal should stay open on validation error") {
+        lyre_tui::app::YoutubeModal::EditingFields(fields) => {
+            assert!(fields.error.as_deref().unwrap_or_default().contains(".."));
+        }
+        _ => panic!("expected to stay on EditingFields"),
+    }
+}
+
+#[test]
+fn youtube_modal_auto_generates_the_file_name_from_title_and_artist_until_overridden() {
+    let mut h = harness();
+    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::EditingFields(lyre_tui::app::YoutubeFieldsModal {
+        url: "https://example.com/watch?v=x".to_string(),
+        title: String::new(),
+        artist: String::new(),
+        album: String::new(),
+        directory: String::new(),
+        file_name: String::new(),
+        file_name_overridden: false,
+        focused: lyre_tui::app::YoutubeField::Title,
+        error: None,
+    }));
+
+    for c in "Bush".chars() {
+        h.app.on_key(key(c));
+    }
+    h.app.on_key(special(KeyCode::Tab));
+    for c in "Kate".chars() {
+        h.app.on_key(key(c));
+    }
+
+    match h.app.modal.youtube_modal.as_ref().unwrap() {
+        lyre_tui::app::YoutubeModal::EditingFields(fields) => {
+            assert_eq!(fields.file_name, "Kate-Bush.mp3");
+            assert!(!fields.file_name_overridden);
+        }
+        _ => panic!("expected EditingFields"),
+    }
+}

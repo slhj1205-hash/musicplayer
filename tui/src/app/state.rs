@@ -5,7 +5,7 @@ use std::{
 
 use ratatui::widgets::ListState;
 
-use lyre_core::{MetadataEdits, PlaylistId, SongId};
+use lyre_core::{youtube::VideoInfo, MetadataEdits, PlaylistId, SongId};
 
 #[derive(Default)]
 pub struct DirScanState {
@@ -45,6 +45,7 @@ pub struct ModalState {
     pub showing_help: bool,
     pub song_modal: Option<SongModal>,
     pub metadata_modal: Option<MetadataEditModal>,
+    pub youtube_modal: Option<YoutubeModal>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -239,6 +240,84 @@ pub struct MetadataEditModal {
     pub edits: MetadataEdits,
     pub focused: MetadataField,
     pub error: Option<String>,
+}
+
+pub enum YoutubeModal {
+    EnteringUrl { url_input: String, error: Option<String> },
+    Fetching { url: String },
+    ConfirmingVideo { url: String, info: VideoInfo },
+    EditingFields(YoutubeFieldsModal),
+    ResolvingCollision { fields: YoutubeFieldsModal, existing_path: PathBuf },
+    Downloading { file_name: String, fields: YoutubeFieldsModal },
+}
+
+pub struct YoutubeFieldsModal {
+    pub url: String,
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub directory: String,
+    pub file_name: String,
+    pub file_name_overridden: bool,
+    pub focused: YoutubeField,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum YoutubeField {
+    Title,
+    Artist,
+    Album,
+    Directory,
+    FileName,
+}
+
+impl YoutubeField {
+    pub const ALL: &'static [YoutubeField] = &[
+        YoutubeField::Title,
+        YoutubeField::Artist,
+        YoutubeField::Album,
+        YoutubeField::Directory,
+        YoutubeField::FileName,
+    ];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            YoutubeField::Title => "Title",
+            YoutubeField::Artist => "Artist",
+            YoutubeField::Album => "Album",
+            YoutubeField::Directory => "Directory",
+            YoutubeField::FileName => "Filename",
+        }
+    }
+
+    pub fn next(self) -> YoutubeField {
+        cycle(Self::ALL, self, 1)
+    }
+
+    pub fn prev(self) -> YoutubeField {
+        cycle(Self::ALL, self, -1)
+    }
+
+    pub fn value<'a>(&self, fields: &'a YoutubeFieldsModal) -> &'a str {
+        match self {
+            YoutubeField::Title => &fields.title,
+            YoutubeField::Artist => &fields.artist,
+            YoutubeField::Album => &fields.album,
+            YoutubeField::Directory => &fields.directory,
+            YoutubeField::FileName => &fields.file_name,
+        }
+    }
+
+    pub fn value_mut<'a>(&self, fields: &'a mut YoutubeFieldsModal) -> &'a mut String {
+        match self {
+            YoutubeField::Title => &mut fields.title,
+            YoutubeField::Artist => &mut fields.artist,
+            YoutubeField::Album => &mut fields.album,
+            YoutubeField::Directory => &mut fields.directory,
+            YoutubeField::FileName => &mut fields.file_name,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

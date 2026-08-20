@@ -36,6 +36,8 @@ color-eyre = "0.6"
 tempfile = "3"
 fnv = "1"
 unicode-width = "0.2"
+yt-dlp = { version = "2.8.2", default-features = false, features = ["rustls"] }
+tokio = { version = "1", features = ["rt"] }
 
 [profile.release]
 opt-level = 3

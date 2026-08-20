@@ -150,6 +150,29 @@ impl Library {
 
         Ok(new_id)
     }
+
+    pub fn insert(&mut self, song: Song) -> InsertOutcome {
+        let id = song.id();
+        if let Some(existing) = self.songs.get(&id) {
+            if existing.path() != song.path() {
+                eprintln!(
+                    "warning: SongId collision between {} and {} -- keeping the first, skipping the second",
+                    existing.path().display(),
+                    song.path().display()
+                );
+            }
+            return InsertOutcome::Collision { existing: id };
+        }
+        self.songs.insert(id, song);
+        self.by_path.push(id);
+        InsertOutcome::Inserted(id)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InsertOutcome {
+    Inserted(SongId),
+    Collision { existing: SongId },
 }
 
 #[derive(Debug, thiserror::Error)]
