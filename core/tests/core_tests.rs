@@ -4,6 +4,7 @@ use std::{path::Path, time::Duration};
 
 use fixtures::write_song;
 use lyre_core::{
+    fuzzy,
     generate_file_name,
     library::{InsertOutcome, Library},
     player::{AudioBackend, PlaybackState},
@@ -853,4 +854,36 @@ fn queue_play_id_finds_a_song_inserted_after_construction() {
 
     assert_eq!(queue.play_id(downloaded_id), Some(downloaded_id));
     assert_eq!(queue.current_id(), Some(downloaded_id));
+}
+
+#[test]
+fn fuzzy_subsequence_score_matches_characters_in_order_but_not_necessarily_contiguous() {
+    assert!(fuzzy::subsequence_score("btl", "beetle").is_some());
+    assert!(fuzzy::subsequence_score("tbl", "beetle").is_none());
+}
+
+#[test]
+fn fuzzy_subsequence_score_of_an_empty_pattern_matches_anything_with_zero_score() {
+    assert_eq!(fuzzy::subsequence_score("", "anything"), Some(0));
+}
+
+#[test]
+fn fuzzy_subsequence_score_rejects_a_pattern_longer_than_the_target() {
+    assert_eq!(fuzzy::subsequence_score("longer", "short"), None);
+}
+
+#[test]
+fn fuzzy_subsequence_score_rewards_a_match_starting_at_a_word_boundary() {
+    let boundary = fuzzy::subsequence_score("b", "blue sky").unwrap();
+    let midword = fuzzy::subsequence_score("b", "ruby sky").unwrap();
+
+    assert!(boundary > midword);
+}
+
+#[test]
+fn fuzzy_normalize_by_length_scores_shorter_fields_higher_for_the_same_raw_score() {
+    let short = fuzzy::normalize_by_length(10, 4);
+    let long = fuzzy::normalize_by_length(10, 40);
+
+    assert!(short > long);
 }

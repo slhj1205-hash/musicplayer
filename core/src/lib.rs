@@ -1,4 +1,5 @@
 pub mod atomic;
+pub mod fuzzy;
 pub mod gst;
 pub mod library;
 pub mod player;
