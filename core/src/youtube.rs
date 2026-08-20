@@ -11,7 +11,12 @@ pub struct VideoInfo {
     pub duration: Option<Duration>,
 }
 
-pub fn fetch_info(url: &str, binaries_dir: &Path) -> Result<VideoInfo, Error> {
+pub fn fetch_and_download(
+    url: &str,
+    binaries_dir: &Path,
+    scratch_dir: &Path,
+    on_info: impl FnOnce(VideoInfo),
+) -> Result<PathBuf, Error> {
     run(async {
         let downloader = build_downloader(binaries_dir).await?;
         let video = downloader.fetch_video_infos(url).await.map_err(Error::YtDlp)?;
@@ -20,28 +25,16 @@ pub fn fetch_info(url: &str, binaries_dir: &Path) -> Result<VideoInfo, Error> {
             return Err(Error::Live);
         }
 
-        Ok(VideoInfo {
-            title: video.title,
-            uploader: video.uploader,
+        on_info(VideoInfo {
+            title: video.title.clone(),
+            uploader: video.uploader.clone(),
             duration: video.duration.and_then(|secs| u64::try_from(secs).ok()).map(Duration::from_secs),
-        })
-    })
-}
+        });
 
-pub fn download_audio(url: &str, binaries_dir: &Path, dest_path: &Path) -> Result<(), Error> {
-    run(async {
-        let downloader = build_downloader(binaries_dir).await?;
-        let video = downloader.fetch_video_infos(url).await.map_err(Error::YtDlp)?;
-
-        if video.is_live == Some(true) {
-            return Err(Error::Live);
-        }
-
-        let dir = dest_path.parent().ok_or_else(|| Error::InvalidDestination(dest_path.to_path_buf()))?;
         let temp = tempfile::Builder::new()
             .prefix(".yt-dlp-download-")
             .suffix(".tmp")
-            .tempfile_in(dir)
+            .tempfile_in(scratch_dir)
             .map_err(Error::Temp)?;
         let temp_path = temp.path().to_path_buf();
         temp.close().map_err(Error::Temp)?;
@@ -57,16 +50,40 @@ pub fn download_audio(url: &str, binaries_dir: &Path, dest_path: &Path) -> Resul
             }
         };
 
+        let audio_temp = tempfile::Builder::new()
+            .prefix(".yt-dlp-audio-")
+            .suffix(".mp3")
+            .tempfile_in(scratch_dir)
+            .map_err(Error::Temp)?;
+        let audio_path = audio_temp.path().to_path_buf();
+        audio_temp.close().map_err(Error::Temp)?;
+
         let config = PostProcessConfig::new().with_audio_codec(AudioCodec::MP3);
         let postprocess_result =
-            downloader.postprocess_video_to_path(&downloaded_path, dest_path, config).await.map_err(Error::YtDlp);
+            downloader.postprocess_video_to_path(&downloaded_path, &audio_path, config).await.map_err(Error::YtDlp);
 
         if let Err(e) = fs::remove_file(&downloaded_path) {
             eprintln!("warning: failed to remove temporary download {}: {e}", downloaded_path.display());
         }
 
-        postprocess_result.map(|_| ())
+        if postprocess_result.is_err() {
+            let _ = fs::remove_file(&audio_path);
+        }
+
+        postprocess_result.map(|_| audio_path)
     })
+}
+
+pub fn finalize_download(temp_path: &Path, dest_path: &Path) -> Result<(), Error> {
+    if fs::rename(temp_path, dest_path).is_err() {
+        fs::copy(temp_path, dest_path).map_err(Error::Finalize)?;
+        let _ = fs::remove_file(temp_path);
+    }
+    Ok(())
+}
+
+pub fn discard_temp_file(path: &Path) {
+    let _ = fs::remove_file(path);
 }
 
 async fn build_downloader(binaries_dir: &Path) -> Result<Downloader, Error> {
@@ -114,12 +131,12 @@ fn capitalize_and_strip(word: &str) -> String {
 pub enum Error {
     #[error("this video is a live stream and cannot be downloaded")]
     Live,
-    #[error("invalid destination path: {}", .0.display())]
-    InvalidDestination(PathBuf),
     #[error("failed to create a temporary file for the download")]
     Temp(#[source] std::io::Error),
     #[error("failed to start the download runtime")]
     Runtime(#[source] std::io::Error),
+    #[error("failed to move the downloaded file into place")]
+    Finalize(#[source] std::io::Error),
     #[error(transparent)]
     YtDlp(#[from] yt_dlp::error::Error),
 }

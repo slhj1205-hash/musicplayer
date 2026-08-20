@@ -21,10 +21,12 @@ use lyre_core::{Library, Player, PlaylistStore, Queue, SongId};
 use crate::Backend;
 
 pub use row_builder::RowCache;
+pub use youtube::{start_youtube_fields, DownloadEvent};
 pub use state::{
-    Category, ChooseActionField, DirScanState, LibraryPanelState, MetadataEditModal, MetadataField, ModalState,
-    Panel, PlaylistDisplayMode, PlaylistPanelState, PlaylistView, QueueSource, RomanizedArtistConfirmModal, Row,
-    SidePanel, Sort, SongModal, StatusKind, StatusMessage, YoutubeField, YoutubeFieldsModal, YoutubeModal,
+    Category, ChooseActionField, DirScanState, DownloadStatus, FetchStatus, LibraryPanelState, MetadataEditModal,
+    MetadataField, ModalState, Panel, PlaylistDisplayMode, PlaylistPanelState, PlaylistView, QueueSource,
+    RomanizedArtistConfirmModal, Row, SidePanel, Sort, SongModal, StatusKind, StatusMessage, YoutubeField,
+    YoutubeFieldsModal, YoutubeModal,
 };
 
 pub struct App {

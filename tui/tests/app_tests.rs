@@ -53,6 +53,24 @@ fn wav(title: &str, artist: &str, samples: usize) -> Vec<u8> {
     out
 }
 
+fn youtube_fields(url: &str, focused: lyre_tui::app::YoutubeField) -> lyre_tui::app::YoutubeFieldsModal {
+    lyre_tui::app::YoutubeFieldsModal {
+        url: url.to_string(),
+        title: String::new(),
+        artist: String::new(),
+        album: String::new(),
+        title_sort: String::new(),
+        artist_sort: String::new(),
+        directory: String::new(),
+        file_name: String::new(),
+        file_name_overridden: false,
+        focused,
+        error: None,
+        fetch_status: lyre_tui::app::FetchStatus::Pending,
+        download_status: lyre_tui::app::DownloadStatus::Pending,
+    }
+}
+
 struct Harness {
     _dir: tempfile::TempDir,
     app: App,
@@ -776,7 +794,7 @@ fn lowercase_y_opens_the_youtube_modal_entering_url() {
     h.app.on_key(key('y'));
 
     let modal = h.app.modal.youtube_modal.as_ref().expect("<y> must open the youtube modal");
-    assert!(matches!(modal, lyre_tui::app::YoutubeModal::EnteringUrl { url_input, error } if url_input.is_empty() && error.is_none()));
+    assert!(matches!(modal, lyre_tui::app::YoutubeModal::EnteringUrl { url_input, error, restore } if url_input.is_empty() && error.is_none() && restore.is_none()));
 }
 
 #[test]
@@ -799,17 +817,13 @@ fn youtube_modal_entering_url_accumulates_typed_characters_and_esc_cancels() {
 fn youtube_modal_rejects_a_directory_that_escapes_the_library_root() {
     let mut h = harness();
     h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::EditingFields(lyre_tui::app::YoutubeFieldsModal {
-        url: "https://example.com/watch?v=x".to_string(),
         title: "Some Title".to_string(),
         artist: "Some Artist".to_string(),
-        album: String::new(),
-        title_sort: String::new(),
-        artist_sort: String::new(),
         directory: "../escape".to_string(),
         file_name: "SomeArtist-SomeTitle.mp3".to_string(),
         file_name_overridden: true,
         focused: lyre_tui::app::YoutubeField::Directory,
-        error: None,
+        ..youtube_fields("https://example.com/watch?v=x", lyre_tui::app::YoutubeField::Directory)
     }));
 
     h.app.on_key(special(KeyCode::Enter));
@@ -825,19 +839,10 @@ fn youtube_modal_rejects_a_directory_that_escapes_the_library_root() {
 #[test]
 fn youtube_modal_auto_generates_the_file_name_from_title_and_artist_until_overridden() {
     let mut h = harness();
-    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::EditingFields(lyre_tui::app::YoutubeFieldsModal {
-        url: "https://example.com/watch?v=x".to_string(),
-        title: String::new(),
-        artist: String::new(),
-        album: String::new(),
-        title_sort: String::new(),
-        artist_sort: String::new(),
-        directory: String::new(),
-        file_name: String::new(),
-        file_name_overridden: false,
-        focused: lyre_tui::app::YoutubeField::Title,
-        error: None,
-    }));
+    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::EditingFields(youtube_fields(
+        "https://example.com/watch?v=x",
+        lyre_tui::app::YoutubeField::Title,
+    )));
 
     for c in "Bush".chars() {
         h.app.on_key(key(c));
@@ -968,19 +973,7 @@ fn accepting_the_romanized_artist_prompt_applies_it_and_closes_the_modal() {
 
 #[test]
 fn youtube_field_visible_hides_the_romanized_fields_by_default() {
-    let fields = lyre_tui::app::YoutubeFieldsModal {
-        url: "https://example.com/watch?v=x".to_string(),
-        title: String::new(),
-        artist: String::new(),
-        album: String::new(),
-        title_sort: String::new(),
-        artist_sort: String::new(),
-        directory: String::new(),
-        file_name: String::new(),
-        file_name_overridden: false,
-        focused: lyre_tui::app::YoutubeField::Title,
-        error: None,
-    };
+    let fields = youtube_fields("https://example.com/watch?v=x", lyre_tui::app::YoutubeField::Title);
     let visible = lyre_tui::app::YoutubeField::visible(&fields);
 
     assert!(!visible.contains(&lyre_tui::app::YoutubeField::TitleSort));
@@ -990,19 +983,10 @@ fn youtube_field_visible_hides_the_romanized_fields_by_default() {
 #[test]
 fn youtube_modal_typing_a_non_ascii_artist_reveals_the_artist_sort_field_in_the_tab_order() {
     let mut h = harness();
-    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::EditingFields(lyre_tui::app::YoutubeFieldsModal {
-        url: "https://example.com/watch?v=x".to_string(),
-        title: String::new(),
-        artist: String::new(),
-        album: String::new(),
-        title_sort: String::new(),
-        artist_sort: String::new(),
-        directory: String::new(),
-        file_name: String::new(),
-        file_name_overridden: false,
-        focused: lyre_tui::app::YoutubeField::Artist,
-        error: None,
-    }));
+    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::EditingFields(youtube_fields(
+        "https://example.com/watch?v=x",
+        lyre_tui::app::YoutubeField::Artist,
+    )));
 
     for c in "夜明けバンド".chars() {
         h.app.on_key(key(c));
@@ -1029,17 +1013,140 @@ fn youtube_modal_typing_a_non_ascii_artist_reveals_the_artist_sort_field_in_the_
 }
 
 #[test]
-fn youtube_modal_confirming_a_video_prefills_the_directory_with_the_library_root() {
+fn start_youtube_fields_with_no_restore_defaults_the_directory_to_the_library_root() {
+    let fields = lyre_tui::app::start_youtube_fields("https://example.com/watch?v=x".to_string(), None);
+
+    assert_eq!(fields.directory, "./");
+    assert!(matches!(fields.fetch_status, lyre_tui::app::FetchStatus::Pending));
+    assert!(matches!(fields.download_status, lyre_tui::app::DownloadStatus::Pending));
+    assert_eq!(fields.focused, lyre_tui::app::YoutubeField::Title);
+}
+
+#[test]
+fn start_youtube_fields_with_a_restore_snapshot_keeps_everything_but_the_url_and_resets_status() {
+    let mut previous = youtube_fields("https://old-url.example.com", lyre_tui::app::YoutubeField::Album);
+    previous.title = "Yoake".to_string();
+    previous.artist = "Some Band".to_string();
+    previous.directory = "custom/subdir".to_string();
+    previous.error = Some("a stale error".to_string());
+
+    let fields = lyre_tui::app::start_youtube_fields("https://new-url.example.com".to_string(), Some(previous));
+
+    assert_eq!(fields.url, "https://new-url.example.com");
+    assert_eq!(fields.title, "Yoake");
+    assert_eq!(fields.artist, "Some Band");
+    assert_eq!(fields.directory, "custom/subdir", "a retried attempt must keep the user's edits");
+    assert!(fields.error.is_none(), "the error from the previous attempt must be cleared");
+    assert_eq!(fields.focused, lyre_tui::app::YoutubeField::Title, "focus always resets to Title on retry");
+    assert!(matches!(fields.fetch_status, lyre_tui::app::FetchStatus::Pending));
+    assert!(matches!(fields.download_status, lyre_tui::app::DownloadStatus::Pending));
+}
+
+#[test]
+fn a_download_failure_interrupts_the_user_and_preserves_their_fields_for_retry() {
     let mut h = harness();
-    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::ConfirmingVideo {
-        url: "https://example.com/watch?v=x".to_string(),
-        info: lyre_core::youtube::VideoInfo { title: "Some Title".to_string(), uploader: None, duration: None },
+    let mut fields = youtube_fields("https://example.com/watch?v=x", lyre_tui::app::YoutubeField::Album);
+    fields.title = "Yoake".to_string();
+    fields.artist = "Some Band".to_string();
+    fields.directory = "custom/subdir".to_string();
+    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::EditingFields(fields));
+
+    h.app.handle_youtube_event_for_test(lyre_tui::app::DownloadEvent::Failed("network error".to_string()));
+
+    match h.app.modal.youtube_modal.as_ref().expect("a failure must not silently close the modal") {
+        lyre_tui::app::YoutubeModal::EnteringUrl { url_input, error, restore } => {
+            assert_eq!(url_input, "https://example.com/watch?v=x");
+            assert_eq!(error.as_deref(), Some("network error"));
+            let restore = restore.as_ref().expect("the typed fields must be preserved for a retry");
+            assert_eq!(restore.title, "Yoake");
+            assert_eq!(restore.artist, "Some Band");
+            assert_eq!(restore.directory, "custom/subdir");
+        }
+        _ => panic!("a failure must bounce the user back to the URL screen"),
+    }
+}
+
+#[test]
+fn a_fetch_failure_while_still_downloading_also_interrupts_and_preserves_fields() {
+    let mut h = harness();
+    let fields = youtube_fields("https://example.com/watch?v=x", lyre_tui::app::YoutubeField::Title);
+    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::Downloading {
+        file_name: "song.mp3".to_string(),
+        dest_path: h.app.library.root().join("song.mp3"),
+        fields,
     });
 
-    h.app.on_key(key('y'));
+    h.app.handle_youtube_event_for_test(lyre_tui::app::DownloadEvent::Failed("this video is a live stream".to_string()));
 
     match h.app.modal.youtube_modal.as_ref().unwrap() {
-        lyre_tui::app::YoutubeModal::EditingFields(fields) => assert_eq!(fields.directory, "./"),
+        lyre_tui::app::YoutubeModal::EnteringUrl { error, restore, .. } => {
+            assert_eq!(error.as_deref(), Some("this video is a live stream"));
+            assert!(restore.is_some());
+        }
+        _ => panic!("a failure while waiting on the download must also interrupt"),
+    }
+}
+
+#[test]
+fn closing_the_modal_after_a_failure_discards_the_saved_fields() {
+    let mut h = harness();
+    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::EditingFields(youtube_fields(
+        "https://example.com/watch?v=x",
+        lyre_tui::app::YoutubeField::Title,
+    )));
+    h.app.handle_youtube_event_for_test(lyre_tui::app::DownloadEvent::Failed("network error".to_string()));
+    assert!(h.app.modal.youtube_modal.is_some());
+
+    h.app.on_key(special(KeyCode::Esc));
+
+    assert!(h.app.modal.youtube_modal.is_none(), "exiting the whole modal must not keep anything around");
+}
+
+#[test]
+fn a_download_finishing_while_still_editing_fields_is_remembered_without_leaving_the_screen() {
+    let mut h = harness();
+    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::EditingFields(youtube_fields(
+        "https://example.com/watch?v=x",
+        lyre_tui::app::YoutubeField::Title,
+    )));
+
+    let temp_path = std::env::temp_dir().join("lyre-test-download.mp3");
+    h.app.handle_youtube_event_for_test(lyre_tui::app::DownloadEvent::DownloadReady(temp_path.clone()));
+
+    match h.app.modal.youtube_modal.as_ref().unwrap() {
+        lyre_tui::app::YoutubeModal::EditingFields(fields) => {
+            assert!(
+                matches!(&fields.download_status, lyre_tui::app::DownloadStatus::Ready(p) if p == &temp_path),
+                "the finished download must be recorded without forcing the user off the fields screen"
+            );
+        }
+        _ => panic!("the user must stay on EditingFields while still typing"),
+    }
+}
+
+#[test]
+fn info_ready_while_editing_fields_updates_the_inline_status_without_touching_typed_fields() {
+    let mut h = harness();
+    let mut fields = youtube_fields("https://example.com/watch?v=x", lyre_tui::app::YoutubeField::Title);
+    fields.title = "user typed this".to_string();
+    h.app.modal.youtube_modal = Some(lyre_tui::app::YoutubeModal::EditingFields(fields));
+
+    h.app.handle_youtube_event_for_test(lyre_tui::app::DownloadEvent::InfoReady {
+        title: "Fetched Video Title".to_string(),
+        uploader: Some("Some Uploader".to_string()),
+    });
+
+    match h.app.modal.youtube_modal.as_ref().unwrap() {
+        lyre_tui::app::YoutubeModal::EditingFields(fields) => {
+            assert_eq!(fields.title, "user typed this", "fetched info must never overwrite what the user typed");
+            match &fields.fetch_status {
+                lyre_tui::app::FetchStatus::Ready { title, uploader } => {
+                    assert_eq!(title, "Fetched Video Title");
+                    assert_eq!(uploader.as_deref(), Some("Some Uploader"));
+                }
+                lyre_tui::app::FetchStatus::Pending => panic!("fetch status must update to Ready"),
+            }
+        }
         _ => panic!("expected EditingFields"),
     }
 }

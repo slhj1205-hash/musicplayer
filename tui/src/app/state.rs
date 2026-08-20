@@ -5,7 +5,7 @@ use std::{
 
 use ratatui::widgets::ListState;
 
-use lyre_core::{needs_romanization, youtube::VideoInfo, MetadataEdits, PlaylistId, SongId};
+use lyre_core::{needs_romanization, MetadataEdits, PlaylistId, SongId};
 
 #[derive(Default)]
 pub struct DirScanState {
@@ -275,12 +275,20 @@ pub struct RomanizedArtistConfirmModal {
 }
 
 pub enum YoutubeModal {
-    EnteringUrl { url_input: String, error: Option<String> },
-    Fetching { url: String },
-    ConfirmingVideo { url: String, info: VideoInfo },
+    EnteringUrl { url_input: String, error: Option<String>, restore: Option<YoutubeFieldsModal> },
     EditingFields(YoutubeFieldsModal),
     ResolvingCollision { fields: YoutubeFieldsModal, existing_path: PathBuf },
-    Downloading { file_name: String, fields: YoutubeFieldsModal },
+    Downloading { file_name: String, dest_path: PathBuf, fields: YoutubeFieldsModal },
+}
+
+pub enum FetchStatus {
+    Pending,
+    Ready { title: String, uploader: Option<String> },
+}
+
+pub enum DownloadStatus {
+    Pending,
+    Ready(PathBuf),
 }
 
 pub struct YoutubeFieldsModal {
@@ -295,6 +303,8 @@ pub struct YoutubeFieldsModal {
     pub file_name_overridden: bool,
     pub focused: YoutubeField,
     pub error: Option<String>,
+    pub fetch_status: FetchStatus,
+    pub download_status: DownloadStatus,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

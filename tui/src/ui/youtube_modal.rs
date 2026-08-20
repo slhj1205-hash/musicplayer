@@ -6,9 +6,9 @@ use ratatui::{
     widgets::{Clear, Paragraph, Widget},
 };
 
-use crate::app::{App, YoutubeField, YoutubeModal};
+use crate::app::{App, FetchStatus, YoutubeField, YoutubeModal};
 
-use super::{centered_rect, dim_area, format_duration, modal_block, modal_body_style};
+use super::{centered_rect, dim_area, modal_block, modal_body_style};
 
 const WIDTH: u16 = 62;
 
@@ -49,9 +49,7 @@ pub fn render(app: &App, full_area: Rect, buf: &mut Buffer) {
     let Some(modal) = &app.modal.youtube_modal else { return };
 
     match modal {
-        YoutubeModal::EnteringUrl { url_input, error } => render_entering_url(url_input, error.as_deref(), full_area, buf),
-        YoutubeModal::Fetching { url } => render_fetching(url, full_area, buf),
-        YoutubeModal::ConfirmingVideo { info, .. } => render_confirming_video(info, full_area, buf),
+        YoutubeModal::EnteringUrl { url_input, error, .. } => render_entering_url(url_input, error.as_deref(), full_area, buf),
         YoutubeModal::EditingFields(fields) => render_editing_fields(fields, full_area, buf),
         YoutubeModal::ResolvingCollision { existing_path, .. } => render_resolving_collision(existing_path, full_area, buf),
         YoutubeModal::Downloading { file_name, .. } => render_downloading(file_name, full_area, buf),
@@ -73,44 +71,23 @@ fn render_entering_url(url_input: &str, error: Option<&str>, full_area: Rect, bu
     render_lines(" Download from YouTube ", lines, full_area, buf);
 }
 
-fn render_fetching(url: &str, full_area: Rect, buf: &mut Buffer) {
-    let lines = vec![
-        Line::raw(""),
-        Line::from("fetching video info…").alignment(Alignment::Center),
-        Line::from(url.to_string()).alignment(Alignment::Center).style(hint_style()),
-        Line::raw(""),
-    ];
-
-    render_lines(" Download from YouTube ", lines, full_area, buf);
-}
-
-fn render_confirming_video(info: &lyre_core::youtube::VideoInfo, full_area: Rect, buf: &mut Buffer) {
-    let uploader = info.uploader.as_deref().unwrap_or("unknown");
-    let duration = info.duration.map(format_duration).unwrap_or_else(|| "unknown".to_string());
-
-    let lines = vec![
-        Line::raw(""),
-        Line::from(info.title.clone()).alignment(Alignment::Center).style(value_style(true)),
-        Line::from(format!("by {uploader} · {duration}")).alignment(Alignment::Center).style(hint_style()),
-        Line::raw(""),
-        Line::from("is this the right video?").alignment(Alignment::Center),
-        Line::raw(""),
-        Line::from(vec![
-            Span::styled("<y>", Style::new().fg(tailwind::GREEN.c400).add_modifier(Modifier::BOLD)),
-            Span::raw(" yes      "),
-            Span::styled("<n>", Style::new().fg(tailwind::RED.c400).add_modifier(Modifier::BOLD)),
-            Span::raw(" no"),
-        ])
-        .alignment(Alignment::Center),
-    ];
-
-    render_lines(" Confirm Video ", lines, full_area, buf);
-}
-
 fn render_editing_fields(fields: &crate::app::YoutubeFieldsModal, full_area: Rect, buf: &mut Buffer) {
     let visible = YoutubeField::visible(fields);
-    let mut lines: Vec<Line> = Vec::with_capacity(visible.len() + 5);
+    let mut lines: Vec<Line> = Vec::with_capacity(visible.len() + 8);
     lines.push(Line::raw(""));
+
+    match &fields.fetch_status {
+        FetchStatus::Pending => {
+            lines.push(Line::from("fetching…").alignment(Alignment::Center).style(hint_style()));
+            lines.push(Line::raw(""));
+        }
+        FetchStatus::Ready { title, uploader } => {
+            let uploader = uploader.as_deref().unwrap_or("unknown");
+            lines.push(Line::from(title.clone()).alignment(Alignment::Center).style(value_style(true)));
+            lines.push(Line::from(format!("by {uploader}")).alignment(Alignment::Center).style(hint_style()));
+            lines.push(Line::raw(""));
+        }
+    }
 
     for field in visible {
         let focused = field == fields.focused;
