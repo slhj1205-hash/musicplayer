@@ -136,7 +136,7 @@ it would be enum-for-enum's-sake. `PlaylistStore`'s five mutators should
 be treated as one shared type regardless of which option is picked —
 they're the same concept repeated five times, not five different ones.
 
-# YouTube (yt-dlp) download integration — plan (2026-08-20)
+# YouTube (yt-dlp) download integration — plan (2026-08-20, revised 2026-08-20)
 
 Not started. Lets the user paste a YouTube URL, confirm it resolved to the
 right video, fill in tags and a filename by hand, and download the audio
@@ -149,45 +149,121 @@ up tag-based metadata for no real benefit here, so this plan always lands a
 tagged file in the library and lets the existing scan/insert path take it
 from there.
 
+Revision note: the section below was checked against the `yt-dlp` crate's
+actual source (v2.8.2, github.com/boul2gom/yt-dlp) rather than assumed from
+its name. Three corrections came out of that: the info struct's fields
+aren't as non-optional as first drafted, "download audio" is genuinely two
+API calls not one, and the license needs a decision before this gets built.
+Everything else in the original plan held up.
+
+## License — needs a decision before starting
+
+- [ ] The `yt-dlp` crate is **GPL-3.0-only** (`license = "GPL-3.0-only"` in
+  its own `Cargo.toml`). This repo currently has no `LICENSE` file and no
+  `license` field in any `Cargo.toml`, so there's nothing formally in
+  conflict yet, but a GPL-3.0-only dependency — even an optional one gated
+  behind `--features youtube` — has real implications for how this project
+  can be licensed and redistributed once it does declare a license,
+  specifically for any distributed binary built with that feature on.
+  Confirm with the user whether that's acceptable before writing any code
+  against the crate, rather than discovering it after the feature exists.
+
 ## Dependency
 
 - [ ] Add the `yt-dlp` crate to `core/Cargo.toml` behind a new `youtube`
   Cargo feature (`[features] youtube = ["dep:yt-dlp", "dep:tokio"]`), not as
-  an unconditional dependency. It pulls in `tokio`/`reqwest`, which is a lot
-  of weight for one optional capability — the project already avoids that
-  (see `fnv` being chosen over `DefaultHasher` specifically for being small
-  and dependency-free, above). Default `cargo build` stays as-is;
-  `cargo build --features youtube` opts in.
+  an unconditional dependency. This still holds, but the weight is larger
+  than "pulls in tokio/reqwest" suggested — the crate's own dependency list
+  includes `moka` (in-memory cache, on by default), `id3`, `mp4ameta`,
+  `chrono`, `regex`, `uuid`, `zip`, `tar`, `xz2`, `sha2`, on top of
+  `tokio`/`reqwest`. Pin the version and trim its default features:
+  ```toml
+  [dependencies]
+  yt-dlp = { version = "2.8.2", default-features = false, features = ["rustls"], optional = true }
+  ```
+  `default-features = false` drops the `cache-memory` (moka) default, which
+  this one-shot per-download use case gets no benefit from — nothing here
+  calls `fetch_video_infos` twice for the same URL within a process
+  lifetime. `rustls` swaps `reqwest`'s TLS backend to a pure-Rust
+  implementation instead of pulling in a system OpenSSL dependency, which
+  fits a Rust workspace that otherwise has no C dependencies besides
+  GStreamer. Default `cargo build` stays as-is; `cargo build --features
+  youtube` opts in.
 
 ## `core/src/youtube.rs` — new module
 
 - [ ] `fn fetch_info(url: &str, binaries_dir: &Path) -> Result<VideoInfo, Error>`
-  — info-only yt-dlp call (no download). Returns:
+  — info-only yt-dlp call (no download), via `Downloader::fetch_video_infos`.
+  Returns:
   ```rust
   pub struct VideoInfo {
       pub title: String,
-      pub uploader: String,
-      pub duration: Duration,
+      pub uploader: Option<String>,
+      pub duration: Option<Duration>,
   }
   ```
+  Corrected from the original draft: the crate's `Video` struct
+  (`yt_dlp::model::Video`) has `uploader: Option<String>` and
+  `duration: Option<i64>` (seconds) — YouTube doesn't guarantee either is
+  present (e.g. a channel that's hidden its name, or a livestream/premiere
+  with no fixed duration). `title` is the only one of the three that's a
+  bare `String` on `Video`. The confirmation screen (`ConfirmingVideo` below)
+  should render `Option::None` as an explicit "unknown", not silently
+  substitute empty string — same reasoning as `generate_file_name`'s "no
+  fallback placeholder text" rule below, applied to display instead of
+  filenames.
   This is display-only, to let the user confirm the link resolved to the
   right video. **It is never used to populate the editable Title/Artist/Album
   fields** — those are always typed by hand (see "Metadata fields" below).
+- [ ] Reject the video at the `ConfirmingVideo` step (see "Flow" below) if
+  `Video::is_live == Some(true)`: a livestream has no fixed end and no
+  finished file to download, which conflicts with this feature's entire
+  "download once, then insert a stable file" design (see the intro
+  paragraph above). Surface this as an `InfoError` variant rather than
+  silently letting `Fetching` proceed into a download that can't complete
+  normally — `DownloadEvent::InfoError(String)` already has a slot for this,
+  no new event variant needed.
 - [ ] `fn download_audio(url: &str, binaries_dir: &Path, dest_path: &Path) -> Result<(), Error>`
-  — full download + ffmpeg audio extraction to `.mp3`, writing to the exact
-  `dest_path` the caller has already resolved (see "Filename generation" and
-  "Directory validation" below for how that path is built and checked).
+  — **corrected: this is two `yt-dlp` calls chained, not one.**
+  `Downloader::download_audio_stream_to_path` fetches whatever YouTube's
+  best *available* audio format actually is — in practice Opus or AAC in a
+  WebM/M4A container, never literally MP3, since YouTube does not serve raw
+  MP3 streams. Saving that under a `.mp3` filename would produce a file with
+  the wrong container/codec despite the extension — lofty (or any strict
+  decoder) would either misparse or reject it. Getting a real MP3 requires a
+  second, explicit transcode step:
+  1. Download the best audio stream to a temporary path in the same
+     directory as `dest_path` (`tempfile` is already a workspace
+     dependency) via `download_audio_stream_to_path`.
+  2. Transcode that temp file to `dest_path` via
+     `Downloader::postprocess_video_to_path` with
+     `PostProcessConfig::new().with_audio_codec(AudioCodec::MP3)` — despite
+     the "video" in its name, this function is a generic FFmpeg argument
+     builder (confirmed by reading `build_ffmpeg_command` in the crate
+     source: it only adds `-c:v`/video-only flags when a video codec is
+     explicitly set in the config) and works correctly on an audio-only
+     input when no video options are set.
+  3. Delete the temp file (`std::fs::remove_file`, best-effort — log and
+     continue on failure, don't fail the whole download over cleanup).
 - [ ] Both functions are synchronous on the outside. Internally each builds
   a single-threaded `tokio::runtime::Runtime` and `.block_on`s the `yt_dlp`
   crate's async calls, so nothing outside this module needs to know tokio
   is involved.
 - [ ] `binaries_dir` is where the crate caches its self-managed `yt-dlp`/
-  `ffmpeg` binaries (downloaded once, reused after). Resolved by the caller
-  (see "Config" below) and passed in as a parameter — same pattern as
-  `Library::scan(root, cache_path)` already uses for its cache path, so
-  `core` stays UI-independent and doesn't reach into XDG env vars itself.
+  `ffmpeg` binaries. Confirmed by reading `Downloader::with_new_binaries` in
+  the crate source: it checks whether `yt-dlp`/`ffmpeg` already exist at the
+  target paths before downloading anything, so calling it on every
+  `fetch_info`/`download_audio` invocation is cheap after the first run —
+  the original plan's "downloaded once, reused after" claim holds.
+  Resolved by the caller (see "Config" below) and passed in as a parameter,
+  same pattern as `Library::scan(root, cache_path)` already uses for its
+  cache path, so `core` stays UI-independent and doesn't reach into XDG env
+  vars itself.
 - [ ] Own `thiserror` `Error` enum, matching the style of `song::Error` /
-  `player::Error` (structured variants with `#[source]`, not a string).
+  `player::Error` (structured variants with `#[source]`, not a string). Wrap
+  `yt_dlp::Error` (also a real `thiserror` enum, so this is a clean
+  `#[source]` chain, not string-matching) plus a variant for the
+  is-live rejection above.
 
 ## Filename generation — pure function in `core`
 
@@ -369,9 +445,11 @@ pub enum YoutubeField { Title, Artist, Album, Directory, FileName }
 2. User pastes/types the URL, `Enter` → spawn the background info-only
    fetch (`fetch_info`), state → `Fetching`.
 3. Background thread sends `DownloadEvent::InfoReady(VideoInfo)` (or
-   `InfoError`). App polls this each tick, same as `Player::poll_events`.
-   On success, state → `ConfirmingVideo`, rendered read-only: title /
-   uploader / duration, with an explicit "is this the right video?" prompt.
+   `InfoError` — including the is-live rejection from `fetch_info` above).
+   App polls this each tick, same as `Player::poll_events`. On success,
+   state → `ConfirmingVideo`, rendered read-only: title / uploader /
+   duration, rendering `None` on the latter two as "unknown" rather than
+   blank, with an explicit "is this the right video?" prompt.
 4. `y`/confirm → `EditingFields`, all of Title/Artist/Album/Directory/
    FileName start **empty** — none of them are seeded from step 3.
    `n`/`Esc` → back to `EnteringUrl` with the input cleared.
@@ -401,7 +479,10 @@ pub enum YoutubeField { Title, Artist, Album, Directory, FileName }
 
 ## Decisions already made (do not re-litigate without asking)
 
-- MP3 only, for now — no format choice in the modal.
+- MP3 only, for now — no format choice in the modal. Concretely this means
+  a download-then-transcode (not download-then-rename) pipeline, since
+  YouTube never serves audio already in an MP3 container — see
+  `download_audio` above.
 - Filename generation always has a working override via the Filename
   field; no fallback placeholder text needed for empty inputs.
 - Word-splitting boundary for filename generation is whitespace **and**
@@ -413,6 +494,8 @@ pub enum YoutubeField { Title, Artist, Album, Directory, FileName }
   `library.root()`), not just a default suggestion.
 - On a filename collision, ask the user (overwrite vs. rename) — never
   silently pick one.
+- Livestreams (`Video::is_live == Some(true)`) are rejected at the
+  confirmation step, not attempted.
 
 ## Testing
 
@@ -424,7 +507,12 @@ pub enum YoutubeField { Title, Artist, Album, Directory, FileName }
   as pure-function tests, no filesystem needed beyond a tempdir.
 - [ ] Real yt-dlp network calls (`fetch_info`, `download_audio`) are not
   suitable for the normal `cargo test --workspace` run — mark them
-  `#[ignore]` for manual/local verification only.
+  `#[ignore]` for manual/local verification only. For `download_audio`
+  specifically, verify the *output* is actually a valid MP3 (e.g. `lofty`
+  can open it and report an MP3 file type), not just that the call
+  succeeded — the two-step download-then-transcode above is exactly the
+  kind of thing that can silently degrade to "produces a file" without
+  producing the *right kind* of file.
 - [ ] Per `CLAUDE.md`: full `cargo test --workspace` must stay green before
   this is considered done, and `cargo build --features youtube` must be
   checked in addition to the default build.
