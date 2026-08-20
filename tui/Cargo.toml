@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 lyre-core = { path = "../core" }
+fnv.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ratatui.workspace = true

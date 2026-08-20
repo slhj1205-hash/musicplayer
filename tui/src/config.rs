@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use fnv::FnvHasher;
+
 use crate::app_name;
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
@@ -19,8 +21,6 @@ fn config_path() -> Option<PathBuf> {
     None
 }
 
-/// Base directory for application data (e.g. playlists), following the
-/// XDG Base Directory spec with a `$HOME/.local/share/<app>` fallback.
 pub fn data_dir() -> Option<PathBuf> {
     let dir_name = app_name::kebab_case();
     if let Ok(xdg) = std::env::var("XDG_DATA_HOME")
@@ -33,8 +33,6 @@ pub fn data_dir() -> Option<PathBuf> {
     None
 }
 
-/// Base directory for cached data (e.g. the scan cache), following the
-/// XDG Base Directory spec with a `$HOME/.cache/<app>` fallback.
 pub fn cache_dir() -> Option<PathBuf> {
     let dir_name = app_name::kebab_case();
     if let Ok(xdg) = std::env::var("XDG_CACHE_HOME")
@@ -47,15 +45,11 @@ pub fn cache_dir() -> Option<PathBuf> {
     None
 }
 
-/// Path to the scan cache file for a given library root. Lives under
-/// `cache_dir()`, keyed by a hash of the canonicalized root so different
-/// library directories don't collide. Falls back to a file inside the
-/// root itself if no cache dir can be determined (no `$HOME`).
 pub fn scan_cache_path(root: &Path) -> PathBuf {
     use std::hash::{Hash, Hasher};
 
     let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let mut hasher = FnvHasher::default();
     canonical.hash(&mut hasher);
     let filename = format!("{:016x}.json", hasher.finish());
 
@@ -65,12 +59,6 @@ pub fn scan_cache_path(root: &Path) -> PathBuf {
     }
 }
 
-/// Path to the playlists file, following the XDG Base Directory spec via
-/// `data_dir()`. Not tied to any particular library -- there is exactly one
-/// playlists file regardless of which directory is currently open, so every
-/// call site must resolve it the same way rather than falling back to a
-/// path derived from the library root. Falls back to a dotfile in the
-/// current directory if no data dir can be determined (no `$HOME`).
 pub fn playlists_path() -> PathBuf {
     match data_dir() {
         Some(dir) => dir.join("playlists"),
