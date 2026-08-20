@@ -3,7 +3,7 @@ use lyre_core::{Library, MetadataEdits, PlaylistStore};
 use ratatui::{buffer::Buffer, layout::Rect, style::Style, widgets::Widget};
 
 use lyre_tui::{
-    app::{App, Category, MetadataField, Panel, PlaylistView, Row, Sort},
+    app::{App, Category, ChooseActionField, MetadataField, Panel, PlaylistView, Row, SidePanel, Sort},
     config,
     keymap::{self, Action},
     ui::{marquee_window, sort_title},
@@ -383,6 +383,51 @@ fn metadata_modal_tab_and_shift_tab_cycle_through_every_field_and_wrap() {
         *visible.last().unwrap(),
         "shift-tab from the first field must wrap back to the last"
     );
+}
+
+#[test]
+fn song_modal_tab_and_shift_tab_move_focus_like_j_and_k() {
+    let mut h = harness();
+    h.app.playlists.create("First");
+    h.app.on_key(key('g'));
+    h.app.on_key(special(KeyCode::Char('A')));
+    assert_eq!(h.app.modal.song_modal.as_ref().unwrap().selected, ChooseActionField::AddToPlaylist);
+
+    h.app.on_key(special(KeyCode::Tab));
+    assert_eq!(
+        h.app.modal.song_modal.as_ref().unwrap().selected,
+        ChooseActionField::CreatePlaylist,
+        "Tab must move focus in the song actions modal, matching the metadata modal"
+    );
+
+    h.app.on_key(special(KeyCode::BackTab));
+    assert_eq!(
+        h.app.modal.song_modal.as_ref().unwrap().selected,
+        ChooseActionField::AddToPlaylist,
+        "Shift+Tab must move focus back, matching the metadata modal"
+    );
+}
+
+#[test]
+fn song_modal_side_panel_tab_and_shift_tab_move_selection_like_j_and_k() {
+    let mut h = harness();
+    h.app.playlists.create("First");
+    h.app.playlists.create("Second");
+    h.app.on_key(key('g'));
+    h.app.on_key(special(KeyCode::Char('A')));
+    h.app.on_key(special(KeyCode::Enter));
+
+    let SidePanel::AddToPlaylist { list_state, .. } = h.app.modal.song_modal.as_ref().unwrap().side.as_ref().unwrap();
+    let start = list_state.selected();
+
+    h.app.on_key(special(KeyCode::Tab));
+    let SidePanel::AddToPlaylist { list_state, .. } = h.app.modal.song_modal.as_ref().unwrap().side.as_ref().unwrap();
+    let after_tab = list_state.selected();
+    assert_ne!(after_tab, start, "Tab must move the side panel selection, matching j/Down");
+
+    h.app.on_key(special(KeyCode::BackTab));
+    let SidePanel::AddToPlaylist { list_state, .. } = h.app.modal.song_modal.as_ref().unwrap().side.as_ref().unwrap();
+    assert_eq!(list_state.selected(), start, "Shift+Tab must move the side panel selection back, matching k/Up");
 }
 
 #[test]

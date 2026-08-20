@@ -260,7 +260,7 @@ impl App {
         if selected == ChooseActionField::CreatePlaylist {
             match key.code {
                 KeyCode::Esc => return,
-                KeyCode::Up | KeyCode::Down if !self.playlists.is_empty() => {
+                KeyCode::Up | KeyCode::Down | KeyCode::Tab | KeyCode::BackTab if !self.playlists.is_empty() => {
                     selected = ChooseActionField::AddToPlaylist;
                 }
                 KeyCode::Enter => {
@@ -287,7 +287,7 @@ impl App {
 
         match key.code {
             KeyCode::Esc => return,
-            KeyCode::Char('j') | KeyCode::Char('k') | KeyCode::Down | KeyCode::Up => {
+            KeyCode::Char('j') | KeyCode::Char('k') | KeyCode::Down | KeyCode::Up | KeyCode::Tab | KeyCode::BackTab => {
                 selected = ChooseActionField::CreatePlaylist;
             }
             KeyCode::Enter => match self.build_add_to_playlist_side(song) {
@@ -321,11 +321,11 @@ impl App {
             KeyCode::Esc => {
                 self.set_song_modal(song, selected, name_input, None);
             }
-            KeyCode::Char('j') | KeyCode::Down => {
+            KeyCode::Char('j') | KeyCode::Down | KeyCode::Tab => {
                 move_wrapping(&mut list_state, options.len(), 1);
                 self.set_song_modal(song, selected, name_input, Some(SidePanel::AddToPlaylist { options, pinned, list_state }));
             }
-            KeyCode::Char('k') | KeyCode::Up => {
+            KeyCode::Char('k') | KeyCode::Up | KeyCode::BackTab => {
                 move_wrapping(&mut list_state, options.len(), -1);
                 self.set_song_modal(song, selected, name_input, Some(SidePanel::AddToPlaylist { options, pinned, list_state }));
             }
