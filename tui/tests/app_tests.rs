@@ -1,10 +1,12 @@
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use lyre_core::{Library, PlaylistStore};
 use ratatui::{buffer::Buffer, layout::Rect, style::Style, widgets::Widget};
 
 use lyre_tui::{
     app::{App, Category, MetadataField, Panel, PlaylistView, Row, Sort},
-    config, ui::sort_title,
+    config,
+    keymap::{self, Action},
+    ui::{marquee_window, sort_title},
     Backend,
 };
 
@@ -641,8 +643,9 @@ fn scan_cache_path_is_stable_for_the_same_root() {
 }
 
 #[test]
-fn playlists_path_lives_under_the_data_dir_regardless_of_library_root() {
+fn playlists_path_lives_under_the_data_dir() {
     let home = tempfile::tempdir().unwrap();
+    let library_root = tempfile::tempdir().unwrap();
 
     let path = unsafe {
         let prev_home = std::env::var("HOME").ok();
@@ -650,7 +653,7 @@ fn playlists_path_lives_under_the_data_dir_regardless_of_library_root() {
         std::env::set_var("HOME", home.path());
         std::env::remove_var("XDG_DATA_HOME");
 
-        let path = config::playlists_path();
+        let path = config::playlists_path(library_root.path());
 
         match prev_home {
             Some(v) => std::env::set_var("HOME", v),
@@ -671,31 +674,31 @@ fn playlists_path_lives_under_the_data_dir_regardless_of_library_root() {
 }
 
 #[test]
-fn playlists_path_does_not_depend_on_which_library_directory_is_open() {
-    let home = tempfile::tempdir().unwrap();
+fn playlists_path_is_stable_for_the_same_root_and_differs_across_roots() {
+    let one_root = tempfile::tempdir().unwrap();
+    let another_root = tempfile::tempdir().unwrap();
 
-    let (from_one_root, from_another_root) = unsafe {
+    let (first, second, from_another_root) = unsafe {
         let prev_home = std::env::var("HOME").ok();
-        std::env::set_var("HOME", home.path());
+        std::env::set_var("HOME", tempfile::tempdir().unwrap().path());
 
-        // playlists_path takes no library root at all -- calling it while "in" two
-        // different library directories must resolve to the exact same file, so
-        // switching directories can never silently point at a different playlists
-        // file than the one the app started with.
-        let from_one_root = config::playlists_path();
-        let from_another_root = config::playlists_path();
+        let first = config::playlists_path(one_root.path());
+        let second = config::playlists_path(one_root.path());
+        let from_another_root = config::playlists_path(another_root.path());
 
         match prev_home {
             Some(v) => std::env::set_var("HOME", v),
             None => std::env::remove_var("HOME"),
         }
 
-        (from_one_root, from_another_root)
+        (first, second, from_another_root)
     };
 
-    assert_eq!(
-        from_one_root, from_another_root,
-        "there must be exactly one playlists file, independent of the current library root"
+    assert_eq!(first, second, "the same library root should always map to the same playlists file");
+    assert_ne!(
+        first, from_another_root,
+        "each library root must get its own playlists file, so switching directories can't silently \
+         prune or overwrite another library's playlists"
     );
 }
 
@@ -712,4 +715,55 @@ fn scrolling_to_the_end_brings_the_last_song_into_view() {
     let mut buf = Buffer::empty(short);
     h.app.render(short, &mut buf);
     assert!(buffer_text(&buf).contains("Grove"), "the last song should scroll into view");
+}
+
+#[test]
+fn ctrl_d_pages_down_instead_of_changing_directory() {
+    assert_eq!(
+        keymap::lookup(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL)),
+        Some(Action::PageDown),
+        "Ctrl+d must resolve to PageDown, not be shadowed by plain d's ChangeDirectory binding"
+    );
+    assert_eq!(
+        keymap::lookup(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE)),
+        Some(Action::ChangeDirectory)
+    );
+}
+
+#[test]
+fn ctrl_u_pages_up_instead_of_unshuffling() {
+    assert_eq!(
+        keymap::lookup(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL)),
+        Some(Action::PageUp),
+        "Ctrl+u must resolve to PageUp, not be shadowed by plain u's Unshuffle binding"
+    );
+    assert_eq!(
+        keymap::lookup(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE)),
+        Some(Action::Unshuffle)
+    );
+}
+
+#[test]
+fn marquee_window_returns_short_ascii_text_unchanged() {
+    assert_eq!(marquee_window("Beacon", 20), "Beacon");
+}
+
+#[test]
+fn marquee_window_never_exceeds_the_visible_width_for_wide_characters() {
+    for text in ["初音ミク", "こんにちは世界", "안녕하세요", "Beacon 灯台 Artist"] {
+        for width in 1..12 {
+            let windowed = marquee_window(text, width);
+            assert!(
+                lyre_tui::ui::display_width(&windowed) <= width,
+                "marquee_window({text:?}, {width}) returned {windowed:?} with display width \
+                 {}, exceeding the {width}-column budget",
+                lyre_tui::ui::display_width(&windowed)
+            );
+        }
+    }
+}
+
+#[test]
+fn marquee_window_zero_width_returns_empty() {
+    assert_eq!(marquee_window("Beacon", 0), "");
 }

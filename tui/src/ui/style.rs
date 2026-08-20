@@ -8,6 +8,11 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, BorderType, HighlightSpacing, List, ListItem},
 };
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
+pub fn display_width(s: &str) -> usize {
+    s.width()
+}
 
 pub fn focus_style() -> Style {
     Style::new().fg(tailwind::YELLOW.c400)
@@ -81,9 +86,9 @@ pub fn plural(count: usize, suffix: &str) -> &str {
 }
 
 fn sort_label_width() -> usize {
-    let fixed = format!(" <o> group: {}  <p> sort: {} ", "", "").chars().count();
-    let max_category = crate::app::Category::ALL.iter().map(|c| c.label().chars().count()).max().unwrap_or(0);
-    let max_sort = crate::app::Sort::ALL.iter().map(|s| s.label().chars().count()).max().unwrap_or(0);
+    let fixed = display_width(&format!(" <o> group: {}  <p> sort: {} ", "", ""));
+    let max_category = crate::app::Category::ALL.iter().map(|c| display_width(c.label())).max().unwrap_or(0);
+    let max_sort = crate::app::Sort::ALL.iter().map(|s| display_width(s.label())).max().unwrap_or(0);
     fixed + max_category + max_sort
 }
 
@@ -113,7 +118,7 @@ pub fn search_title(
 
 pub fn sort_title(category_label: &str, sort_label: &str, border_style: Style) -> Line<'static> {
     let text = format!(" <o> group: {category_label}  <p> sort: {sort_label} ");
-    let fill_len = sort_label_width().saturating_sub(text.chars().count());
+    let fill_len = sort_label_width().saturating_sub(display_width(&text));
     let fill = "─".repeat(fill_len);
 
     Line::from(vec![Span::styled(text, title_style(border_style)), Span::styled(fill, border_style)])
@@ -173,12 +178,8 @@ pub fn marquee_window(text: &str, visible_width: usize) -> Cow<'_, str> {
         return Cow::Borrowed("");
     }
 
-    if text.len() <= visible_width {
-        return Cow::Borrowed(text);
-    }
-
     let chars: Vec<char> = text.chars().collect();
-    if chars.len() <= visible_width {
+    if display_width(text) <= visible_width {
         return Cow::Borrowed(text);
     }
 
@@ -199,22 +200,40 @@ pub fn marquee_window(text: &str, visible_width: usize) -> Cow<'_, str> {
     };
 
     if offset == 0 {
-        let text_width = visible_width.saturating_sub(1);
-        let mut truncated: String = chars[..text_width.min(chars.len())].iter().collect();
-        truncated.push('…');
+        let ellipsis_width = '…'.width().unwrap_or(1);
+        let show_ellipsis = visible_width >= ellipsis_width;
+        let budget = if show_ellipsis { visible_width - ellipsis_width } else { visible_width };
+        let mut truncated = String::new();
+        let mut used = 0usize;
+        for &c in &chars {
+            let w = c.width().unwrap_or(0);
+            if used + w > budget {
+                break;
+            }
+            truncated.push(c);
+            used += w;
+        }
+        if show_ellipsis {
+            truncated.push('…');
+        }
         return Cow::Owned(truncated);
     }
 
-    Cow::Owned((0..visible_width)
-        .map(|i| {
-            let idx = (offset + i) % loop_len;
-            if idx < chars.len() {
-                chars[idx]
-            } else {
-                gap[idx - chars.len()]
-            }
-        })
-        .collect())
+    let mut out = String::new();
+    let mut used = 0usize;
+    let mut i = 0usize;
+    while used < visible_width && i <= loop_len {
+        let idx = (offset + i) % loop_len;
+        let c = if idx < chars.len() { chars[idx] } else { gap[idx - chars.len()] };
+        let w = c.width().unwrap_or(0);
+        if used + w > visible_width {
+            break;
+        }
+        out.push(c);
+        used += w;
+        i += 1;
+    }
+    Cow::Owned(out)
 }
 
 pub fn format_duration(d: Duration) -> String {

@@ -31,8 +31,8 @@ fn main() -> Result<()> {
 
     config::save_last_dir(library.root());
 
-    let playlists_dir = config::playlists_path();
-    let (playlists, prune_stats) = PlaylistStore::load(playlists_dir, &library);
+    let playlists_path = config::playlists_path(library.root());
+    let (playlists, prune_stats) = PlaylistStore::load(playlists_path, &library);
     if prune_stats.songs_removed > 0 {
         eprintln!(
             "warning: removed {} missing song(s) across {} playlist(s)",

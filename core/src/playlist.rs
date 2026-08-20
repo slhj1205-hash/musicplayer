@@ -276,16 +276,8 @@ impl PlaylistStore {
     }
 
     pub fn delete(&mut self, id: PlaylistId) -> bool {
-        let Some(playlist) = self.playlists.remove(&id) else {
+        if self.playlists.remove(&id).is_none() {
             return false;
-        };
-        for song in playlist.songs() {
-            if let Some(entry) = self.membership.get_mut(song) {
-                entry.retain(|&other| other != id);
-                if entry.is_empty() {
-                    self.membership.remove(song);
-                }
-            }
         }
         self.reindex();
         self.mark_dirty();

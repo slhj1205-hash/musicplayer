@@ -19,9 +19,9 @@ use crate::app::{App, Panel};
 
 pub use rows::{label_for, render_no_matches, render_song_list_panel, viewport, PanelHeight};
 pub use style::{
-    centered_rect, content_style, dim_area, focus_style, format_duration, format_mtime, marker_style,
-    marquee_window, modal_block, modal_body_style, plural, search_title, side_by_side_rect, sort_title,
-    styled_list, titled_block, titled_block_split, unfocused_style,
+    centered_rect, content_style, dim_area, display_width, focus_style, format_duration, format_mtime,
+    marker_style, marquee_window, modal_block, modal_body_style, plural, search_title, side_by_side_rect,
+    sort_title, styled_list, titled_block, titled_block_split, unfocused_style,
 };
 
 impl Widget for &mut App {

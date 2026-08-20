@@ -12,7 +12,10 @@ use crate::{
     theme,
 };
 
-use super::{focus_style, marquee_window, search_title, sort_title, styled_list, titled_block_split, unfocused_style};
+use super::{
+    display_width, focus_style, marquee_window, search_title, sort_title, styled_list, titled_block_split,
+    unfocused_style,
+};
 
 const CHROME_WIDTH: usize = 4;
 
@@ -157,7 +160,7 @@ pub fn song_list_items<'a>(
                 let is_current = Some(*id) == current;
                 let indent = "  ".repeat(*depth);
                 let marker = if is_current { "♪ " } else { "  " };
-                let prefix_width = indent.chars().count() + marker.chars().count();
+                let prefix_width = display_width(&indent) + display_width(marker);
                 let mut used = prefix_width;
 
                 let mut spans: Vec<Span> = Vec::new();
@@ -177,22 +180,22 @@ pub fn song_list_items<'a>(
                             ((text_budget * ARTIST_WIDTH_RATIO) / 100).max(MIN_MARQUEE_WIDTH.min(text_budget));
 
                         let title_text = marquee_window(title, title_max);
-                        used += title_text.chars().count();
+                        used += display_width(&title_text);
                         spans.push(Span::styled(title_text, title_style(is_current)));
 
                         if let Some(artist) = artist {
                             let sep = " — ";
-                            used += sep.chars().count();
+                            used += display_width(sep);
                             spans.push(Span::styled(sep, separator_style()));
 
                             let artist_text = marquee_window(artist, artist_max);
-                            used += artist_text.chars().count();
+                            used += display_width(&artist_text);
                             spans.push(Span::styled(artist_text, artist_style()));
                         }
 
                         if let Some(detail) = detail {
                             let text = format!(" ({detail})");
-                            used += text.chars().count();
+                            used += display_width(&text);
                             spans.push(Span::styled(text, detail_style()));
                         }
 
@@ -200,7 +203,7 @@ pub fn song_list_items<'a>(
                             && mode != PlaylistDisplayMode::Hidden {
                                 let names = lookup(*id);
                                 let sep = " · ";
-                                let remaining = content_width.saturating_sub(used + sep.chars().count());
+                                let remaining = content_width.saturating_sub(used + display_width(sep));
                                 if let Some(suffix) = playlist_suffix(&names, mode, remaining) {
                                     spans.push(Span::styled(sep, separator_style()));
                                     spans.push(Span::styled(suffix, playlist_style()));

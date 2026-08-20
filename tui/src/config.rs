@@ -59,10 +59,17 @@ pub fn scan_cache_path(root: &Path) -> PathBuf {
     }
 }
 
-pub fn playlists_path() -> PathBuf {
+pub fn playlists_path(root: &Path) -> PathBuf {
+    use std::hash::{Hash, Hasher};
+
+    let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let mut hasher = FnvHasher::default();
+    canonical.hash(&mut hasher);
+    let filename = format!("{:016x}-playlists.json", hasher.finish());
+
     match data_dir() {
-        Some(dir) => dir.join("playlists"),
-        None => PathBuf::from(format!(".{}-playlists", app_name::kebab_case())),
+        Some(dir) => dir.join(filename),
+        None => root.join(app_name::playlists_file_name()),
     }
 }
 

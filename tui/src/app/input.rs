@@ -49,8 +49,12 @@ impl App {
             self.pending_number.clear();
         }
 
+        const MAX_PENDING_NUMBER_DIGITS: usize = 3;
+
         if is_digit {
-            if let KeyCode::Char(c) = key.code {
+            if let KeyCode::Char(c) = key.code
+                && self.pending_number.len() < MAX_PENDING_NUMBER_DIGITS
+            {
                 self.pending_number.push(c);
                 self.set_status(
                     format!("jump to Up Next #{} (press <n>, <Esc> to cancel)", self.pending_number),

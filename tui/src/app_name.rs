@@ -17,3 +17,7 @@ fn slug(separator: char) -> String {
 pub fn cache_file_name() -> String {
     format!(".{}-cache.json", kebab_case())
 }
+
+pub fn playlists_file_name() -> String {
+    format!(".{}-playlists.json", kebab_case())
+}
