@@ -34,6 +34,7 @@ ratatui = "0.30"
 crossterm = "0.29"
 color-eyre = "0.6"
 tempfile = "3"
+fnv = "1"
 
 [profile.release]
 opt-level = 3

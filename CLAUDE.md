@@ -10,6 +10,16 @@ Lyre is a terminal music player. Cargo workspace with three crates:
 - `tui` (`lyre-tui`) — the ratatui interface: rendering, input handling, app state.
 - root (`lyre`) — thin binary (`src/main.rs`) that wires the two together.
 
+## Pre-release status
+
+This program has not been released yet. There is no installed base and no on-disk
+data to preserve compatibility with. Breaking changes to any identifier, hash,
+serialized format, cache file, or config layout (`SongId`, `scan_cache.json`,
+`playlists.json`, etc.) are fine to make directly, with no migration path and no
+versioning shim — old cache/playlist files can simply be treated as stale and
+regenerated. Don't add migration code or backward-compat branches for these
+unless asked; that overhead is only worth it after a real release.
+
 ## Build / test / run
 
 Building requires GStreamer dev headers:

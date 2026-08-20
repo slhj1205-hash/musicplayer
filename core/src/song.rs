@@ -1,11 +1,12 @@
 use std::{
-    collections::hash_map::DefaultHasher,
     fmt, fs,
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
+
+use fnv::FnvHasher;
 
 use lofty::{
     config::WriteOptions,
@@ -41,7 +42,7 @@ pub struct SongId(u64);
 
 impl SongId {
     pub fn compute(path: &Path, len: u64, modified_secs: u64) -> SongId {
-        let mut hasher = DefaultHasher::new();
+        let mut hasher = FnvHasher::default();
         path.hash(&mut hasher);
         len.hash(&mut hasher);
         modified_secs.hash(&mut hasher);

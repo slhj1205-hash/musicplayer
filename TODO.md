@@ -51,7 +51,7 @@ errors are modeled consistently with `thiserror`. Findings below, worst first.
 
 ## Design risk worth discussing
 
-- [ ] **`SongId` is derived from `std::collections::hash_map::DefaultHasher`**
+- [x] **`SongId` is derived from `std::collections::hash_map::DefaultHasher`**
   (`core/src/song.rs`), used as a *persisted, cross-run, cross-machine* identity
   — it's the join key for `scan_cache.json` and `playlists.json`. The stdlib
   explicitly does not guarantee `DefaultHasher`'s algorithm stays the same across
@@ -59,11 +59,20 @@ errors are modeled consistently with `thiserror`. Findings below, worst first.
   future `rustc`/std upgrade that changes this algorithm would silently
   regenerate different `SongId`s for every song on the next scan — playlists
   would get pruned as if every song had vanished, no error, just an empty
-  playlist next launch. Consider pinning to an explicit, versioned hash (e.g. a
-  small `siphash`/`fnv`/`blake3` dependency with a documented, stable algorithm)
-  instead of relying on a standard-library implementation detail. Needs a short
-  design discussion since it touches the on-disk `SongId` representation — likely
-  wants a one-time migration for anyone already using the app.
+  playlist next launch.
+
+  **Fixed:** Switched `SongId::compute` to `fnv::FnvHasher` — FNV-1a, a
+  small, dependency-free, explicitly-versioned crate with a documented,
+  stable algorithm, instead of relying on `DefaultHasher`'s unspecified
+  implementation. `SongId` isn't used as a `HashMap` key under adversarial
+  input, so FNV's weaker collision resistance versus SipHash is not a
+  concern here; it's also the fastest option on the short (~30-80 byte)
+  path+len+mtime keys `compute` hashes. No migration needed or added — see
+  the new "Pre-release status" section above; existing `scan_cache.json`/
+  `playlists.json` files will just be treated as stale and regenerated.
+  Verified: workspace builds clean, `cargo clippy --workspace --all-targets`
+  shows only the pre-existing unrelated `collapsible_if` warning, and the
+  full test suite (98 tests) passes.
 
 ## Cleanup, not urgent
 

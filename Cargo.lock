@@ -978,6 +978,7 @@ dependencies = [
 name = "lyre-core"
 version = "0.1.0"
 dependencies = [
+ "fnv",
  "gstreamer",
  "lofty",
  "rand 0.10.2",

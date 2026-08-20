@@ -16,6 +16,7 @@ thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 gstreamer.workspace = true
+fnv.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
