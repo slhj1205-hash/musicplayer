@@ -49,7 +49,7 @@ pub struct ModalState {
     pub romanized_artist_confirm: Option<RomanizedArtistConfirmModal>,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Category {
     #[default]
     None,
@@ -77,7 +77,7 @@ impl Category {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Sort {
     #[default]
     Title,
@@ -122,7 +122,7 @@ pub enum Panel {
     Playlists,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum PlaylistDisplayMode {
     #[default]
     Hidden,

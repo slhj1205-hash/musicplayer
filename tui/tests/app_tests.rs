@@ -3,7 +3,7 @@ use lyre_core::{Library, MetadataEdits, PlaylistStore};
 use ratatui::{buffer::Buffer, layout::Rect, style::Style, widgets::Widget};
 
 use lyre_tui::{
-    app::{App, Category, ChooseActionField, MetadataField, Panel, PlaylistView, Row, SidePanel, Sort},
+    app::{App, Category, ChooseActionField, MetadataField, Panel, PlaylistDisplayMode, PlaylistView, Row, SidePanel, Sort},
     config,
     ui::{marquee_window, sort_title},
     Backend,
@@ -116,6 +116,12 @@ fn key(c: char) -> KeyEvent {
 
 fn special(code: KeyCode) -> KeyEvent {
     KeyEvent::from(code)
+}
+
+static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn lock_env() -> std::sync::MutexGuard<'static, ()> {
+    ENV_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn song_titles(app: &mut App) -> Vec<String> {
@@ -719,6 +725,7 @@ fn sort_title_width_is_stable_across_every_category_and_sort_combination() {
 
 #[test]
 fn scan_cache_path_lives_under_the_cache_dir_not_the_library_root() {
+    let _guard = lock_env();
     let home = tempfile::tempdir().unwrap();
     let library_root = tempfile::tempdir().unwrap();
 
@@ -754,6 +761,7 @@ fn scan_cache_path_lives_under_the_cache_dir_not_the_library_root() {
 
 #[test]
 fn scan_cache_path_is_stable_for_the_same_root() {
+    let _guard = lock_env();
     let library_root = tempfile::tempdir().unwrap();
 
     let (first, second) = unsafe {
@@ -776,6 +784,7 @@ fn scan_cache_path_is_stable_for_the_same_root() {
 
 #[test]
 fn playlists_path_lives_under_the_data_dir() {
+    let _guard = lock_env();
     let home = tempfile::tempdir().unwrap();
     let library_root = tempfile::tempdir().unwrap();
 
@@ -807,6 +816,7 @@ fn playlists_path_lives_under_the_data_dir() {
 
 #[test]
 fn playlists_path_is_stable_for_the_same_root_and_differs_across_roots() {
+    let _guard = lock_env();
     let one_root = tempfile::tempdir().unwrap();
     let another_root = tempfile::tempdir().unwrap();
 
@@ -831,6 +841,101 @@ fn playlists_path_is_stable_for_the_same_root_and_differs_across_roots() {
         first, from_another_root,
         "each library root must get its own playlists file, so switching directories can't silently \
          prune or overwrite another library's playlists"
+    );
+}
+
+#[test]
+fn view_state_round_trips_through_serde() {
+    let state = config::ViewState {
+        library_category: Category::Artist,
+        library_sort: Sort::DateModified,
+        library_playlist_mode: PlaylistDisplayMode::Expanded,
+        playlist_category: Category::Path,
+        playlist_sort: Sort::Duration,
+    };
+
+    let json = serde_json::to_string(&state.library_category).unwrap();
+    assert_eq!(serde_json::from_str::<Category>(&json).unwrap(), state.library_category);
+
+    let json = serde_json::to_string(&state.library_sort).unwrap();
+    assert_eq!(serde_json::from_str::<Sort>(&json).unwrap(), state.library_sort);
+
+    let json = serde_json::to_string(&state.library_playlist_mode).unwrap();
+    assert_eq!(serde_json::from_str::<PlaylistDisplayMode>(&json).unwrap(), state.library_playlist_mode);
+}
+
+#[test]
+fn saved_view_state_is_reloaded_on_the_next_launch() {
+    let _guard = lock_env();
+    let home = tempfile::tempdir().unwrap();
+
+    let reloaded = unsafe {
+        let prev_home = std::env::var("HOME").ok();
+        let prev_xdg = std::env::var("XDG_CONFIG_HOME").ok();
+        std::env::set_var("HOME", home.path());
+        std::env::remove_var("XDG_CONFIG_HOME");
+
+        config::save_view_state(&config::ViewState {
+            library_category: Category::Artist,
+            library_sort: Sort::Path,
+            library_playlist_mode: PlaylistDisplayMode::Count,
+            playlist_category: Category::None,
+            playlist_sort: Sort::Title,
+        });
+        let reloaded = config::load_view_state();
+
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+        match prev_xdg {
+            Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
+
+        reloaded
+    };
+
+    assert_eq!(reloaded.library_category, Category::Artist);
+    assert_eq!(reloaded.library_sort, Sort::Path);
+    assert_eq!(reloaded.library_playlist_mode, PlaylistDisplayMode::Count);
+    assert_eq!(reloaded.playlist_category, Category::None);
+    assert_eq!(reloaded.playlist_sort, Sort::Title);
+}
+
+#[test]
+fn saving_view_state_does_not_clobber_the_last_dir() {
+    let _guard = lock_env();
+    let home = tempfile::tempdir().unwrap();
+    let library_root = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(library_root.path()).unwrap();
+
+    let reloaded_dir = unsafe {
+        let prev_home = std::env::var("HOME").ok();
+        let prev_xdg = std::env::var("XDG_CONFIG_HOME").ok();
+        std::env::set_var("HOME", home.path());
+        std::env::remove_var("XDG_CONFIG_HOME");
+
+        config::save_last_dir(library_root.path());
+        config::save_view_state(&config::ViewState { library_category: Category::Artist, ..Default::default() });
+        let reloaded_dir = config::load_last_dir();
+
+        match prev_home {
+            Some(v) => std::env::set_var("HOME", v),
+            None => std::env::remove_var("HOME"),
+        }
+        match prev_xdg {
+            Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),
+            None => std::env::remove_var("XDG_CONFIG_HOME"),
+        }
+
+        reloaded_dir
+    };
+
+    assert_eq!(
+        reloaded_dir.as_deref(),
+        Some(library_root.path()),
+        "saving view state must not erase the previously saved last_dir"
     );
 }
 

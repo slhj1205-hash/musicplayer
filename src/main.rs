@@ -40,7 +40,14 @@ fn main() -> Result<()> {
         );
     }
 
-    let app = App::new(library, playlists, Backend::detect());
+    let mut app = App::new(library, playlists, Backend::detect());
+
+    let view_state = config::load_view_state();
+    app.library_panel.category = view_state.library_category;
+    app.library_panel.sort = view_state.library_sort;
+    app.library_panel.playlist_mode = view_state.library_playlist_mode;
+    app.playlist_panel.category = view_state.playlist_category;
+    app.playlist_panel.sort = view_state.playlist_sort;
 
     ratatui::run(|terminal| app.run(terminal))
 }

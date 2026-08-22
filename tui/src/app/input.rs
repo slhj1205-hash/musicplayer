@@ -160,6 +160,13 @@ impl App {
         match key.code {
             KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
                 self.playlists.flush();
+                crate::config::save_view_state(&crate::config::ViewState {
+                    library_category: self.library_panel.category,
+                    library_sort: self.library_panel.sort,
+                    library_playlist_mode: self.library_panel.playlist_mode,
+                    playlist_category: self.playlist_panel.category,
+                    playlist_sort: self.playlist_panel.sort,
+                });
                 self.should_exit = true;
             }
             _ => self.modal.confirming_quit = false,

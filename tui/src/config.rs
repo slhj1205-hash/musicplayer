@@ -2,11 +2,26 @@ use std::path::{Path, PathBuf};
 
 use fnv::FnvHasher;
 
+use crate::app::{Category, PlaylistDisplayMode, Sort};
 use crate::app_name;
 
 #[derive(Default, serde::Serialize, serde::Deserialize)]
 struct Config {
     last_dir: Option<PathBuf>,
+    library_category: Option<Category>,
+    library_sort: Option<Sort>,
+    library_playlist_mode: Option<PlaylistDisplayMode>,
+    playlist_category: Option<Category>,
+    playlist_sort: Option<Sort>,
+}
+
+#[derive(Default)]
+pub struct ViewState {
+    pub library_category: Category,
+    pub library_sort: Sort,
+    pub library_playlist_mode: PlaylistDisplayMode,
+    pub playlist_category: Category,
+    pub playlist_sort: Sort,
 }
 
 fn config_path() -> Option<PathBuf> {
@@ -84,15 +99,51 @@ pub fn load_last_dir() -> Option<PathBuf> {
     config.last_dir.filter(|dir| dir.is_dir())
 }
 
+pub fn load_view_state() -> ViewState {
+    let Some(path) = config_path() else { return ViewState::default() };
+    let Ok(contents) = std::fs::read_to_string(path) else { return ViewState::default() };
+    let Ok(config) = serde_json::from_str::<Config>(&contents) else { return ViewState::default() };
+
+    ViewState {
+        library_category: config.library_category.unwrap_or_default(),
+        library_sort: config.library_sort.unwrap_or_default(),
+        library_playlist_mode: config.library_playlist_mode.unwrap_or_default(),
+        playlist_category: config.playlist_category.unwrap_or_default(),
+        playlist_sort: config.playlist_sort.unwrap_or_default(),
+    }
+}
+
 pub fn save_last_dir(dir: &Path) {
     let Some(path) = config_path() else {
         return;
     };
-    let config = Config { last_dir: Some(dir.to_path_buf()) };
-    let Ok(json) = serde_json::to_string_pretty(&config) else {
+    let mut config = read_config(&path);
+    config.last_dir = Some(dir.to_path_buf());
+    write_config(&path, &config);
+}
+
+pub fn save_view_state(state: &ViewState) {
+    let Some(path) = config_path() else {
         return;
     };
-    if let Err(e) = lyre_core::atomic::write(&path, json.as_bytes()) {
+    let mut config = read_config(&path);
+    config.library_category = Some(state.library_category);
+    config.library_sort = Some(state.library_sort);
+    config.library_playlist_mode = Some(state.library_playlist_mode);
+    config.playlist_category = Some(state.playlist_category);
+    config.playlist_sort = Some(state.playlist_sort);
+    write_config(&path, &config);
+}
+
+fn read_config(path: &Path) -> Config {
+    std::fs::read_to_string(path).ok().and_then(|contents| serde_json::from_str(&contents).ok()).unwrap_or_default()
+}
+
+fn write_config(path: &Path, config: &Config) {
+    let Ok(json) = serde_json::to_string_pretty(config) else {
+        return;
+    };
+    if let Err(e) = lyre_core::atomic::write(path, json.as_bytes()) {
         eprintln!("warning: failed to persist config: {e}");
     }
 }
