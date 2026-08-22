@@ -153,14 +153,11 @@ impl App {
         if !event::poll(timeout)? {
             return Ok(false);
         }
-        match event::read()? {
-            e if e.as_key_press_event().is_some() => {
-                self.handle_key(e.as_key_press_event().expect("checked above"));
-                Ok(true)
-            }
-
-            _ => Ok(true),
+        let event = event::read()?;
+        if let Some(key) = event.as_key_press_event() {
+            self.handle_key(key);
         }
+        Ok(true)
     }
 
     fn begin_dir_scan(&mut self) {

@@ -233,11 +233,14 @@ impl PlaylistStore {
     }
 
     pub fn add_song(&mut self, id: PlaylistId, song: SongId) -> Mutated {
-        if !self.playlists.contains_key(&id) || self.contains(id, song) {
+        if self.contains(id, song) {
             return Mutated::No;
         }
+        let Some(playlist) = self.playlists.get_mut(&id) else {
+            return Mutated::No;
+        };
 
-        self.playlists.get_mut(&id).expect("checked above").add(song);
+        playlist.add(song);
         self.membership.entry(song).or_default().push(id);
 
         self.revision += 1;

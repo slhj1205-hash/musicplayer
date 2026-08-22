@@ -74,7 +74,9 @@ impl App {
         }
         match self.selected_row() {
             Some(Row::Song(song_id, _)) => {
-                let playlist = self.playlists.get(id).expect("checked above");
+                let Some(playlist) = self.playlists.get(id) else {
+                    return;
+                };
                 self.queue = Queue::from_playlist(playlist);
                 self.queue_source = QueueSource::Playlist(id);
                 if let Some(played) = self.queue.play_id(song_id) {
