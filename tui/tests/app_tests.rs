@@ -404,17 +404,97 @@ fn song_modal_side_panel_tab_and_shift_tab_move_selection_like_j_and_k() {
     h.app.on_key(key('w'));
     h.app.on_key(special(KeyCode::Enter));
 
-    let SidePanel::AddToPlaylist { list_state, .. } = h.app.modal.song_modal.as_ref().unwrap().side.as_ref().unwrap();
+    let SidePanel::AddToPlaylist { list_state, .. } = h.app.modal.song_modal.as_ref().unwrap().side.as_ref().unwrap() else {
+        panic!("expected the add-to-playlist side panel")
+    };
     let start = list_state.selected();
 
     h.app.on_key(special(KeyCode::Tab));
-    let SidePanel::AddToPlaylist { list_state, .. } = h.app.modal.song_modal.as_ref().unwrap().side.as_ref().unwrap();
+    let SidePanel::AddToPlaylist { list_state, .. } = h.app.modal.song_modal.as_ref().unwrap().side.as_ref().unwrap() else {
+        panic!("expected the add-to-playlist side panel")
+    };
     let after_tab = list_state.selected();
     assert_ne!(after_tab, start, "Tab must move the side panel selection, matching j/Down");
 
     h.app.on_key(special(KeyCode::BackTab));
-    let SidePanel::AddToPlaylist { list_state, .. } = h.app.modal.song_modal.as_ref().unwrap().side.as_ref().unwrap();
+    let SidePanel::AddToPlaylist { list_state, .. } = h.app.modal.song_modal.as_ref().unwrap().side.as_ref().unwrap() else {
+        panic!("expected the add-to-playlist side panel")
+    };
     assert_eq!(list_state.selected(), start, "Shift+Tab must move the side panel selection back, matching k/Up");
+}
+
+#[test]
+fn remove_from_playlist_option_is_hidden_when_the_song_is_not_in_any_playlist() {
+    let mut h = harness();
+    h.app.playlists.create("First");
+    h.app.on_key(key('g'));
+
+    h.app.on_key(key('w'));
+    h.app.on_key(special(KeyCode::Tab));
+    assert_eq!(
+        h.app.modal.song_modal.as_ref().unwrap().selected,
+        ChooseActionField::CreatePlaylist,
+        "Remove from Playlist must be skipped when the song isn't in any playlist"
+    );
+}
+
+#[test]
+fn song_modal_cycles_through_add_remove_and_create_when_the_song_is_in_a_playlist() {
+    let mut h = harness();
+    let playlist_id = h.app.playlists.create("First");
+    h.app.on_key(key('g'));
+    let Some(Row::Song(song_id, _)) = h.app.selected_row() else { panic!("expected a song row") };
+    h.app.playlists.add_song(playlist_id, song_id);
+
+    h.app.on_key(key('w'));
+    assert_eq!(h.app.modal.song_modal.as_ref().unwrap().selected, ChooseActionField::AddToPlaylist);
+
+    h.app.on_key(special(KeyCode::Tab));
+    assert_eq!(h.app.modal.song_modal.as_ref().unwrap().selected, ChooseActionField::RemoveFromPlaylist);
+
+    h.app.on_key(special(KeyCode::Tab));
+    assert_eq!(h.app.modal.song_modal.as_ref().unwrap().selected, ChooseActionField::CreatePlaylist);
+
+    h.app.on_key(special(KeyCode::Tab));
+    assert_eq!(h.app.modal.song_modal.as_ref().unwrap().selected, ChooseActionField::AddToPlaylist);
+}
+
+#[test]
+fn selecting_remove_from_playlist_lists_only_the_playlists_containing_the_song() {
+    let mut h = harness();
+    let first = h.app.playlists.create("First");
+    h.app.playlists.create("Second");
+    h.app.on_key(key('g'));
+    let Some(Row::Song(song_id, _)) = h.app.selected_row() else { panic!("expected a song row") };
+    h.app.playlists.add_song(first, song_id);
+
+    h.app.on_key(key('w'));
+    h.app.on_key(special(KeyCode::Tab));
+    h.app.on_key(special(KeyCode::Enter));
+
+    let SidePanel::RemoveFromPlaylist { options, .. } = h.app.modal.song_modal.as_ref().unwrap().side.as_ref().unwrap()
+    else {
+        panic!("expected the remove-from-playlist side panel")
+    };
+    assert_eq!(options.as_slice(), [first]);
+}
+
+#[test]
+fn confirming_a_remove_from_playlist_selection_removes_the_song_and_closes_the_modal() {
+    let mut h = harness();
+    let first = h.app.playlists.create("First");
+    h.app.on_key(key('g'));
+    let Some(Row::Song(song_id, _)) = h.app.selected_row() else { panic!("expected a song row") };
+    h.app.playlists.add_song(first, song_id);
+
+    h.app.on_key(key('w'));
+    h.app.on_key(special(KeyCode::Tab));
+    h.app.on_key(special(KeyCode::Enter));
+    h.app.on_key(special(KeyCode::Enter));
+
+    assert!(!h.app.playlists.contains(first, song_id), "the song should be removed from the playlist");
+    assert!(h.app.status.text.contains("removed from \"First\""));
+    assert!(h.app.modal.song_modal.is_none(), "the song modal should close after removing");
 }
 
 #[test]

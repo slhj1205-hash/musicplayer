@@ -97,7 +97,7 @@ pub const BINDINGS: &[Binding] = &[
     Binding { keys: &[(KeyCode::Char(']'), NONE), (KeyCode::Char('='), NONE)], action: Action::VolumeUp,
         display: "<]>/<=>", desc: "Volume down / up", section: Section::Global, dispatch: true },
     Binding { keys: &[(KeyCode::Char('w'), NONE)], action: Action::OpenSongModal,
-        display: "<w>", desc: "Song actions: add to / create playlist", section: Section::Global, dispatch: true },
+        display: "<w>", desc: "Song actions: add to / remove from / create playlist", section: Section::Global, dispatch: true },
     Binding { keys: &[(KeyCode::Char('E'), NONE)], action: Action::OpenMetadataEditModal,
         display: "<Shift+E>", desc: "Edit song metadata (title/artist/album/genre/track/date)", section: Section::Global, dispatch: true },
     Binding { keys: &[(KeyCode::Char('y'), NONE)], action: Action::OpenYoutubeModal,

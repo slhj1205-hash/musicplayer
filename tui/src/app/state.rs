@@ -110,7 +110,7 @@ impl Sort {
     }
 }
 
-fn cycle<T: Copy + PartialEq>(all: &[T], current: T, delta: isize) -> T {
+pub(crate) fn cycle<T: Copy + PartialEq>(all: &[T], current: T, delta: isize) -> T {
     let len = all.len() as isize;
     let idx = all.iter().position(|x| *x == current).unwrap_or(0) as isize;
     all[(idx + delta).rem_euclid(len) as usize]
@@ -389,13 +389,23 @@ impl YoutubeField {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChooseActionField {
     AddToPlaylist,
+    RemoveFromPlaylist,
     CreatePlaylist,
+}
+
+impl ChooseActionField {
+    pub const ALL: &'static [ChooseActionField] =
+        &[ChooseActionField::AddToPlaylist, ChooseActionField::RemoveFromPlaylist, ChooseActionField::CreatePlaylist];
 }
 
 pub enum SidePanel {
     AddToPlaylist {
         options: Vec<PlaylistId>,
         pinned: Vec<PlaylistId>,
+        list_state: ListState,
+    },
+    RemoveFromPlaylist {
+        options: Vec<PlaylistId>,
         list_state: ListState,
     },
 }

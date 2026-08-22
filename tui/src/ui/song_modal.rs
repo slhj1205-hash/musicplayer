@@ -16,9 +16,12 @@ const BASE_WIDTH: u16 = 56;
 const SIDE_WIDTH: u16 = 46;
 const SIDE_HEIGHT: u16 = 14;
 
-fn base_box_height(song: Option<&Song>, has_playlists: bool) -> u16 {
+fn base_box_height(song: Option<&Song>, has_add: bool, has_remove: bool) -> u16 {
     let mut lines: u16 = 5;
-    if has_playlists {
+    if has_add {
+        lines += 1;
+    }
+    if has_remove {
         lines += 1;
     }
     if song.is_some() {
@@ -37,15 +40,22 @@ pub fn render(app: &App, full_area: Rect, buf: &mut Buffer) {
 
     let song = app.library.get(modal.song);
     let has_side = modal.side.is_some();
-    let content_height = base_box_height(song, !app.playlists.is_empty());
+    let has_remove = !app.playlists.containing(modal.song).is_empty();
+    let content_height = base_box_height(song, !app.playlists.is_empty(), has_remove);
     let height = if has_side { content_height.max(SIDE_HEIGHT) } else { content_height };
 
     let (base_rect, side_rect) = side_by_side_rect(BASE_WIDTH, SIDE_WIDTH, height, has_side, full_area);
 
     render_choose_action(app, modal, base_rect, buf);
 
-    if let Some(SidePanel::AddToPlaylist { options, pinned, list_state }) = &modal.side {
-        render_add_to_playlist_side(app, options, pinned, list_state, side_rect, buf);
+    match &modal.side {
+        Some(SidePanel::AddToPlaylist { options, pinned, list_state }) => {
+            render_add_to_playlist_side(app, options, pinned, list_state, side_rect, buf);
+        }
+        Some(SidePanel::RemoveFromPlaylist { options, list_state }) => {
+            render_remove_from_playlist_side(app, options, list_state, side_rect, buf);
+        }
+        None => {}
     }
 }
 
@@ -67,11 +77,17 @@ fn render_choose_action(app: &App, modal: &SongModal, popup: Rect, buf: &mut Buf
     });
 
     let add_selected = modal.selected == ChooseActionField::AddToPlaylist;
+    let remove_selected = modal.selected == ChooseActionField::RemoveFromPlaylist;
     let create_selected = modal.selected == ChooseActionField::CreatePlaylist;
 
     let add_line = (!app.playlists.is_empty()).then(|| {
         let (marker, style) = marker_style(add_selected);
         Line::from(format!("{marker}Add to Playlist")).style(style)
+    });
+
+    let remove_line = (!app.playlists.containing(modal.song).is_empty()).then(|| {
+        let (marker, style) = marker_style(remove_selected);
+        Line::from(format!("{marker}Remove from Playlist")).style(style)
     });
 
     let create_line = {
@@ -91,6 +107,7 @@ fn render_choose_action(app: &App, modal: &SongModal, popup: Rect, buf: &mut Buf
     lines.extend(album_line);
     lines.push(Line::raw(""));
     lines.extend(add_line);
+    lines.extend(remove_line);
     lines.push(create_line);
     lines.push(Line::raw(""));
     lines.push(Line::from(hint).alignment(Alignment::Center).style(Style::new().fg(theme::TEXT_MUTED)));
@@ -134,6 +151,31 @@ fn render_add_to_playlist_side(
         }
 
     let list = styled_list(items, modal_block(" Add to Playlist ").padding(ratatui::widgets::Padding::horizontal(1)));
+
+    StatefulWidget::render(list, popup, buf, &mut render_state);
+}
+
+fn render_remove_from_playlist_side(
+    app: &App,
+    options: &[PlaylistId],
+    list_state: &ListState,
+    popup: Rect,
+    buf: &mut Buffer,
+) {
+    Widget::render(Clear, popup, buf);
+
+    let items: Vec<ListItem> = options
+        .iter()
+        .map(|&id| {
+            let name = app.playlists.get(id).map(|p| p.name()).unwrap_or("<deleted>");
+            ListItem::new(name.to_string()).style(content_style())
+        })
+        .collect();
+
+    let mut render_state = *list_state;
+
+    let list =
+        styled_list(items, modal_block(" Remove from Playlist ").padding(ratatui::widgets::Padding::horizontal(1)));
 
     StatefulWidget::render(list, popup, buf, &mut render_state);
 }

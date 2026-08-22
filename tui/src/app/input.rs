@@ -5,7 +5,7 @@ use lyre_core::{Mutated, SongId};
 use crate::keymap::{self, Action, Direction};
 
 use super::navigation::move_wrapping;
-use super::state::{ChooseActionField, Panel, PlaylistView, SidePanel, StatusKind};
+use super::state::{cycle, ChooseActionField, Panel, PlaylistView, SidePanel, StatusKind};
 use super::App;
 
 impl App {
@@ -260,8 +260,10 @@ impl App {
         if selected == ChooseActionField::CreatePlaylist {
             match key.code {
                 KeyCode::Esc => return,
-                KeyCode::Up | KeyCode::Down | KeyCode::Tab | KeyCode::BackTab if !self.playlists.is_empty() => {
-                    selected = ChooseActionField::AddToPlaylist;
+                KeyCode::Up | KeyCode::Down | KeyCode::Tab | KeyCode::BackTab => {
+                    let visible = self.visible_choose_action_fields(song);
+                    let delta = if matches!(key.code, KeyCode::Up | KeyCode::BackTab) { -1 } else { 1 };
+                    selected = cycle(&visible, selected, delta);
                 }
                 KeyCode::Enter => {
                     let trimmed = name_input.trim();
@@ -288,19 +290,33 @@ impl App {
         match key.code {
             KeyCode::Esc => return,
             KeyCode::Char('j') | KeyCode::Char('k') | KeyCode::Down | KeyCode::Up | KeyCode::Tab | KeyCode::BackTab => {
-                selected = ChooseActionField::CreatePlaylist;
+                let visible = self.visible_choose_action_fields(song);
+                let delta = if matches!(key.code, KeyCode::Char('k') | KeyCode::Up | KeyCode::BackTab) { -1 } else { 1 };
+                selected = cycle(&visible, selected, delta);
             }
-            KeyCode::Enter => match self.build_add_to_playlist_side(song) {
-                Some(side) => {
-                    self.set_song_modal(song, selected, name_input, Some(side));
-                    return;
-                }
-                None => {
-                    self.set_status(
-                        "no other playlists to add to -- select Create Playlist instead",
-                        StatusKind::Info,
-                    );
-                }
+            KeyCode::Enter => match selected {
+                ChooseActionField::AddToPlaylist => match self.build_add_to_playlist_side(song) {
+                    Some(side) => {
+                        self.set_song_modal(song, selected, name_input, Some(side));
+                        return;
+                    }
+                    None => {
+                        self.set_status(
+                            "no other playlists to add to -- select Create Playlist instead",
+                            StatusKind::Info,
+                        );
+                    }
+                },
+                ChooseActionField::RemoveFromPlaylist => match self.build_remove_from_playlist_side(song) {
+                    Some(side) => {
+                        self.set_song_modal(song, selected, name_input, Some(side));
+                        return;
+                    }
+                    None => {
+                        self.set_status("song is not in any playlist", StatusKind::Info);
+                    }
+                },
+                ChooseActionField::CreatePlaylist => {}
             },
             _ => {}
         }
@@ -315,33 +331,74 @@ impl App {
         name_input: String,
         side: SidePanel,
     ) {
-        let SidePanel::AddToPlaylist { options, pinned, mut list_state } = side;
-
-        match key.code {
-            KeyCode::Esc => {
-                self.set_song_modal(song, selected, name_input, None);
-            }
-            KeyCode::Char('j') | KeyCode::Down | KeyCode::Tab => {
-                move_wrapping(&mut list_state, options.len(), 1);
-                self.set_song_modal(song, selected, name_input, Some(SidePanel::AddToPlaylist { options, pinned, list_state }));
-            }
-            KeyCode::Char('k') | KeyCode::Up | KeyCode::BackTab => {
-                move_wrapping(&mut list_state, options.len(), -1);
-                self.set_song_modal(song, selected, name_input, Some(SidePanel::AddToPlaylist { options, pinned, list_state }));
-            }
-            KeyCode::Enter => {
-                if let Some(&target) = list_state.selected().and_then(|i| options.get(i)) {
-                    let name = self.playlists.get(target).map(|p| p.name().to_string()).unwrap_or_default();
-                    if self.playlists.add_song(target, song) == Mutated::Yes {
-                        self.set_status(format!("added to \"{name}\""), StatusKind::Success);
-                    } else {
-                        self.set_status(format!("already in \"{name}\""), StatusKind::Info);
+        match side {
+            SidePanel::AddToPlaylist { options, pinned, mut list_state } => match key.code {
+                KeyCode::Esc => {
+                    self.set_song_modal(song, selected, name_input, None);
+                }
+                KeyCode::Char('j') | KeyCode::Down | KeyCode::Tab => {
+                    move_wrapping(&mut list_state, options.len(), 1);
+                    self.set_song_modal(
+                        song,
+                        selected,
+                        name_input,
+                        Some(SidePanel::AddToPlaylist { options, pinned, list_state }),
+                    );
+                }
+                KeyCode::Char('k') | KeyCode::Up | KeyCode::BackTab => {
+                    move_wrapping(&mut list_state, options.len(), -1);
+                    self.set_song_modal(
+                        song,
+                        selected,
+                        name_input,
+                        Some(SidePanel::AddToPlaylist { options, pinned, list_state }),
+                    );
+                }
+                KeyCode::Enter => {
+                    if let Some(&target) = list_state.selected().and_then(|i| options.get(i)) {
+                        let name = self.playlists.get(target).map(|p| p.name().to_string()).unwrap_or_default();
+                        if self.playlists.add_song(target, song) == Mutated::Yes {
+                            self.set_status(format!("added to \"{name}\""), StatusKind::Success);
+                        } else {
+                            self.set_status(format!("already in \"{name}\""), StatusKind::Info);
+                        }
                     }
                 }
-            }
-            _ => {
-                self.set_song_modal(song, selected, name_input, Some(SidePanel::AddToPlaylist { options, pinned, list_state }));
-            }
+                _ => {
+                    self.set_song_modal(
+                        song,
+                        selected,
+                        name_input,
+                        Some(SidePanel::AddToPlaylist { options, pinned, list_state }),
+                    );
+                }
+            },
+            SidePanel::RemoveFromPlaylist { options, mut list_state } => match key.code {
+                KeyCode::Esc => {
+                    self.set_song_modal(song, selected, name_input, None);
+                }
+                KeyCode::Char('j') | KeyCode::Down | KeyCode::Tab => {
+                    move_wrapping(&mut list_state, options.len(), 1);
+                    self.set_song_modal(song, selected, name_input, Some(SidePanel::RemoveFromPlaylist { options, list_state }));
+                }
+                KeyCode::Char('k') | KeyCode::Up | KeyCode::BackTab => {
+                    move_wrapping(&mut list_state, options.len(), -1);
+                    self.set_song_modal(song, selected, name_input, Some(SidePanel::RemoveFromPlaylist { options, list_state }));
+                }
+                KeyCode::Enter => {
+                    if let Some(&target) = list_state.selected().and_then(|i| options.get(i)) {
+                        let name = self.playlists.get(target).map(|p| p.name().to_string()).unwrap_or_default();
+                        if self.playlists.remove_song(target, song) == Mutated::Yes {
+                            self.set_status(format!("removed from \"{name}\""), StatusKind::Success);
+                        } else {
+                            self.set_status(format!("not in \"{name}\""), StatusKind::Info);
+                        }
+                    }
+                }
+                _ => {
+                    self.set_song_modal(song, selected, name_input, Some(SidePanel::RemoveFromPlaylist { options, list_state }));
+                }
+            },
         }
     }
 

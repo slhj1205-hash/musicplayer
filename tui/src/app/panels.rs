@@ -1,6 +1,6 @@
 use ratatui::widgets::ListState;
 
-use lyre_core::PlaylistId;
+use lyre_core::{PlaylistId, SongId};
 
 use super::state::{heading_selected_message, ChooseActionField, Panel, PlaylistView, Row, SidePanel, SongModal, StatusKind};
 use super::App;
@@ -66,6 +66,22 @@ impl App {
             };
         add_to_playlist_side(&self.playlists, currently_viewing, song)
     }
+
+    pub(super) fn build_remove_from_playlist_side(&self, song: SongId) -> Option<SidePanel> {
+        remove_from_playlist_side(&self.playlists, song)
+    }
+
+    pub(super) fn visible_choose_action_fields(&self, song: SongId) -> Vec<ChooseActionField> {
+        ChooseActionField::ALL
+            .iter()
+            .copied()
+            .filter(|field| match field {
+                ChooseActionField::AddToPlaylist => !self.playlists.is_empty(),
+                ChooseActionField::RemoveFromPlaylist => !self.playlists.containing(song).is_empty(),
+                ChooseActionField::CreatePlaylist => true,
+            })
+            .collect()
+    }
 }
 
 fn add_to_playlist_side(
@@ -95,4 +111,18 @@ fn add_to_playlist_side(
     list_state.select(Some(0));
 
     Some(SidePanel::AddToPlaylist { options, pinned, list_state })
+}
+
+fn remove_from_playlist_side(playlists: &lyre_core::PlaylistStore, song: SongId) -> Option<SidePanel> {
+    let options: Vec<PlaylistId> =
+        playlists.ids_sorted_by_name().iter().copied().filter(|&id| playlists.contains(id, song)).collect();
+
+    if options.is_empty() {
+        return None;
+    }
+
+    let mut list_state = ListState::default();
+    list_state.select(Some(0));
+
+    Some(SidePanel::RemoveFromPlaylist { options, list_state })
 }
