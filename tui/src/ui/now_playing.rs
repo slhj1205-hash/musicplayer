@@ -1,12 +1,13 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Layout, Rect},
-    style::{palette::tailwind, Color, Style},
+    style::Style,
     text::{Line, Text},
     widgets::{Gauge, List, ListItem, Paragraph, Widget},
 };
 
 use crate::app::{App, QueueSource};
+use crate::theme;
 
 use super::{content_style, format_duration, marquee_window, plural, titled_block, unfocused_style};
 
@@ -86,17 +87,17 @@ pub fn render_position(app: &App, area: Rect, buf: &mut Buffer) {
     let [pos_area, gauge_area, dur_area] = area.layout(&layout);
 
     Paragraph::new(pos_label)
-        .style(Style::new().fg(tailwind::SLATE.c400))
+        .style(Style::new().fg(theme::TEXT_MUTED))
         .render(pos_area, buf);
 
     Gauge::default()
-        .gauge_style(Style::new().fg(Color::White).bg(Color::Black))
+        .gauge_style(Style::new().fg(theme::GAUGE_FOREGROUND).bg(theme::GAUGE_BACKGROUND))
         .ratio(ratio)
         .label("")
         .render(gauge_area, buf);
 
     Paragraph::new(dur_label)
-        .style(Style::new().fg(tailwind::SLATE.c400))
+        .style(Style::new().fg(theme::TEXT_MUTED))
         .alignment(Alignment::Right)
         .render(dur_area, buf);
 }

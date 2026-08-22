@@ -1,35 +1,36 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
-    style::{palette::tailwind, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Clear, Paragraph, Widget},
 };
 
 use crate::app::{App, FetchStatus, YoutubeField, YoutubeModal};
+use crate::theme;
 
 use super::{centered_rect, dim_area, modal_block, modal_body_style};
 
 const WIDTH: u16 = 62;
 
 fn label_style() -> Style {
-    Style::new().fg(tailwind::SLATE.c400)
+    Style::new().fg(theme::TEXT_MUTED)
 }
 
 fn value_style(focused: bool) -> Style {
     if focused {
-        Style::new().fg(tailwind::SLATE.c100).add_modifier(Modifier::BOLD)
+        Style::new().fg(theme::TEXT_PRIMARY).add_modifier(Modifier::BOLD)
     } else {
-        Style::new().fg(tailwind::SLATE.c200)
+        Style::new().fg(theme::TEXT_SECONDARY)
     }
 }
 
 fn error_style() -> Style {
-    Style::new().fg(tailwind::RED.c400)
+    Style::new().fg(theme::ERROR)
 }
 
 fn hint_style() -> Style {
-    Style::new().fg(tailwind::SLATE.c400)
+    Style::new().fg(theme::TEXT_MUTED)
 }
 
 fn render_lines(title: &str, lines: Vec<Line<'static>>, full_area: Rect, buf: &mut Buffer) {
@@ -120,9 +121,9 @@ fn render_resolving_collision(existing_path: &std::path::Path, full_area: Rect, 
         Line::from("already exists").alignment(Alignment::Center),
         Line::raw(""),
         Line::from(vec![
-            Span::styled("<o>", Style::new().fg(tailwind::AMBER.c400).add_modifier(Modifier::BOLD)),
+            Span::styled("<o>", Style::new().fg(theme::WARNING).add_modifier(Modifier::BOLD)),
             Span::raw(" overwrite      "),
-            Span::styled("<r>", Style::new().fg(tailwind::CYAN.c400).add_modifier(Modifier::BOLD)),
+            Span::styled("<r>", Style::new().fg(theme::HIGHLIGHT).add_modifier(Modifier::BOLD)),
             Span::raw(" rename"),
         ])
         .alignment(Alignment::Center),

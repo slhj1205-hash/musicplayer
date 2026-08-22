@@ -2,7 +2,7 @@ use lyre_core::{PlaylistId, SongId};
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
-    style::{palette::tailwind, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span, Text},
     widgets::{Clear, Paragraph, Widget},
 };
@@ -10,18 +10,19 @@ use ratatui::{
 use crate::app::App;
 use crate::app_name::APP_NAME;
 use crate::keymap::{self, Section};
+use crate::theme;
 
 use super::{centered_rect, dim_area, modal_block, modal_body_style};
 
 fn key_style() -> Style {
-    Style::new().fg(tailwind::CYAN.c300).add_modifier(Modifier::BOLD)
+    Style::new().fg(theme::KEY_HINT).add_modifier(Modifier::BOLD)
 }
 
 fn yes_no_line() -> Line<'static> {
     Line::from(vec![
-        Span::styled("<y>", Style::new().fg(tailwind::GREEN.c400).add_modifier(Modifier::BOLD)),
+        Span::styled("<y>", Style::new().fg(theme::SUCCESS).add_modifier(Modifier::BOLD)),
         Span::raw(" yes      "),
-        Span::styled("<n>", Style::new().fg(tailwind::RED.c400).add_modifier(Modifier::BOLD)),
+        Span::styled("<n>", Style::new().fg(theme::ERROR).add_modifier(Modifier::BOLD)),
         Span::raw(" no"),
     ])
     .alignment(Alignment::Center)
@@ -85,8 +86,8 @@ pub fn render_romanized_artist_confirm(app: &App, full_area: Rect, buf: &mut Buf
 pub fn render_help_overlay(full_area: Rect, buf: &mut Buffer) {
     dim_area(full_area, buf);
 
-    let header_style = Style::new().fg(tailwind::AMBER.c400).add_modifier(Modifier::BOLD);
-    let note_style = Style::new().fg(tailwind::SLATE.c400);
+    let header_style = Style::new().fg(theme::WARNING).add_modifier(Modifier::BOLD);
+    let note_style = Style::new().fg(theme::TEXT_MUTED);
 
     let row = |key: &str, desc: &str| -> Line<'static> {
         Line::from(vec![

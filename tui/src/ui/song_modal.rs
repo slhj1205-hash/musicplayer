@@ -2,12 +2,13 @@ use lyre_core::{PlaylistId, Song};
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
-    style::{palette::tailwind, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Text},
     widgets::{Clear, ListItem, ListState, Paragraph, StatefulWidget, Widget},
 };
 
 use crate::app::{App, ChooseActionField, Panel, PlaylistView, SidePanel, SongModal};
+use crate::theme;
 
 use super::{content_style, dim_area, marker_style, modal_block, side_by_side_rect, styled_list};
 
@@ -55,14 +56,14 @@ fn render_choose_action(app: &App, modal: &SongModal, popup: Rect, buf: &mut Buf
 
     let title_line = Line::from(song.map(|s| s.title().to_string()).unwrap_or_else(|| "this song".to_string()))
         .alignment(Alignment::Center)
-        .style(Style::new().fg(tailwind::SLATE.c100).add_modifier(Modifier::BOLD));
+        .style(Style::new().fg(theme::TEXT_PRIMARY).add_modifier(Modifier::BOLD));
 
     let artist_line = song.map(|s| {
-        Line::from(s.artist().to_string()).alignment(Alignment::Center).style(Style::new().fg(tailwind::SLATE.c400))
+        Line::from(s.artist().to_string()).alignment(Alignment::Center).style(Style::new().fg(theme::TEXT_MUTED))
     });
 
     let album_line = song.and_then(|s| s.metadata().album.as_deref()).map(|album| {
-        Line::from(album.to_string()).alignment(Alignment::Center).style(Style::new().fg(tailwind::SLATE.c400))
+        Line::from(album.to_string()).alignment(Alignment::Center).style(Style::new().fg(theme::TEXT_MUTED))
     });
 
     let add_selected = modal.selected == ChooseActionField::AddToPlaylist;
@@ -92,7 +93,7 @@ fn render_choose_action(app: &App, modal: &SongModal, popup: Rect, buf: &mut Buf
     lines.extend(add_line);
     lines.push(create_line);
     lines.push(Line::raw(""));
-    lines.push(Line::from(hint).alignment(Alignment::Center).style(Style::new().fg(tailwind::SLATE.c400)));
+    lines.push(Line::from(hint).alignment(Alignment::Center).style(Style::new().fg(theme::TEXT_MUTED)));
 
     Paragraph::new(Text::from(lines))
         .style(content_style())
@@ -119,7 +120,7 @@ fn render_add_to_playlist_side(
     for &id in pinned {
         let name = app.playlists.get(id).map(|p| p.name()).unwrap_or("<deleted>");
         let label = if Some(id) == viewing_id { "current" } else { "already added" };
-        items.push(ListItem::new(format!("{name} ({label})")).style(Style::new().fg(tailwind::SLATE.c500)));
+        items.push(ListItem::new(format!("{name} ({label})")).style(Style::new().fg(theme::TEXT_DIM)));
     }
     for &id in options {
         let name = app.playlists.get(id).map(|p| p.name()).unwrap_or("<deleted>");

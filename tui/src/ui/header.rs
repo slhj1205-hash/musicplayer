@@ -1,7 +1,7 @@
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{palette::tailwind, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
@@ -10,15 +10,16 @@ use lyre_core::player::PlaybackState;
 
 use crate::app::App;
 use crate::app_name::APP_NAME;
+use crate::theme;
 
 pub fn render(app: &App, area: Rect, buf: &mut Buffer) {
     let (state_label, state_style) = match app.player.state() {
-        PlaybackState::Idle => ("idle", Style::new().fg(tailwind::SLATE.c400)),
+        PlaybackState::Idle => ("idle", Style::new().fg(theme::TEXT_MUTED)),
         PlaybackState::Playing => {
-            ("playing", Style::new().fg(tailwind::GREEN.c400).add_modifier(Modifier::BOLD))
+            ("playing", Style::new().fg(theme::SUCCESS).add_modifier(Modifier::BOLD))
         }
         PlaybackState::Paused => {
-            ("paused", Style::new().fg(tailwind::AMBER.c400).add_modifier(Modifier::BOLD))
+            ("paused", Style::new().fg(theme::WARNING).add_modifier(Modifier::BOLD))
         }
     };
 
@@ -29,6 +30,6 @@ pub fn render(app: &App, area: Rect, buf: &mut Buffer) {
     ]);
 
     Paragraph::new(line)
-        .style(Style::new().fg(tailwind::SLATE.c100))
+        .style(Style::new().fg(theme::TEXT_PRIMARY))
         .render(area, buf);
 }

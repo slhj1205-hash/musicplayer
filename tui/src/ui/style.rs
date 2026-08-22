@@ -4,30 +4,32 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
-    style::{palette::tailwind, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, BorderType, HighlightSpacing, List, ListItem},
 };
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
+use crate::theme;
 
 pub fn display_width(s: &str) -> usize {
     s.width()
 }
 
 pub fn focus_style() -> Style {
-    Style::new().fg(tailwind::YELLOW.c400)
+    Style::new().fg(theme::FOCUS)
 }
 
 pub fn unfocused_style() -> Style {
-    Style::new().fg(tailwind::SLATE.c200)
+    Style::new().fg(theme::TEXT_SECONDARY)
 }
 
 pub fn content_style() -> Style {
-    Style::new().fg(tailwind::SLATE.c200)
+    Style::new().fg(theme::TEXT_SECONDARY)
 }
 
 pub fn modal_body_style() -> Style {
-    Style::new().fg(tailwind::SLATE.c100)
+    Style::new().fg(theme::TEXT_PRIMARY)
 }
 
 fn title_style(border_style: Style) -> Style {
@@ -52,13 +54,13 @@ pub fn modal_block(title: impl Into<String>) -> Block<'static> {
     Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(border_style)
-        .style(Style::new().bg(tailwind::SLATE.c900))
+        .style(Style::new().bg(theme::MODAL_BACKGROUND))
         .title(Span::styled(title.into(), title_style(border_style)))
         .title_alignment(Alignment::Center)
 }
 
 pub fn selected_style() -> Style {
-    Style::new().bg(tailwind::SLATE.c800).add_modifier(Modifier::BOLD)
+    Style::new().bg(theme::SELECTED_BACKGROUND).add_modifier(Modifier::BOLD)
 }
 
 pub fn marker_style(selected: bool) -> (&'static str, Style) {
@@ -128,8 +130,8 @@ pub fn dim_area(area: Rect, buf: &mut Buffer) {
     for y in area.y..area.y.saturating_add(area.height) {
         for x in area.x..area.x.saturating_add(area.width) {
             if let Some(cell) = buf.cell_mut((x, y)) {
-                cell.set_fg(tailwind::SLATE.c700);
-                cell.set_bg(tailwind::SLATE.c950);
+                cell.set_fg(theme::DIM_FOREGROUND);
+                cell.set_bg(theme::DIM_BACKGROUND);
             }
         }
     }
