@@ -2,7 +2,7 @@ use std::{cmp::Ordering, path::Path};
 
 use lyre_core::{PlaylistId, Song};
 
-use super::state::{Category, Panel, PlaylistView, Row, Sort};
+use super::state::{is_filtering, Category, Panel, PlaylistView, Row, Sort};
 use super::App;
 
 #[derive(Default)]
@@ -77,12 +77,12 @@ impl App {
     fn build_rows_into(&self, out: &mut Vec<Row>) {
         match self.panel {
             Panel::Library => {
-                let query = self.library_panel.search_query.to_lowercase();
-                let terms: Vec<&str> = query.split_whitespace().collect();
-                if terms.is_empty() {
+                if !is_filtering(&self.library_panel.search_query) {
                     let songs: Vec<&Song> = self.library.songs_by_path().collect();
                     build_rows(songs, self.library_panel.category, self.library_panel.sort, self.library.root(), out);
                 } else {
+                    let query = self.library_panel.search_query.to_lowercase();
+                    let terms: Vec<&str> = query.split_whitespace().collect();
                     let songs = fuzzy_filter_and_sort(self.library.songs_by_path(), &terms);
                     build_relevance_rows(songs, out);
                 }
@@ -96,14 +96,14 @@ impl App {
 
     fn build_playlist_rows_into(&self, id: PlaylistId, out: &mut Vec<Row>) {
         let Some(playlist) = self.playlists.get(id) else { return };
-        let query = self.playlist_panel.search_query.to_lowercase();
-        let terms: Vec<&str> = query.split_whitespace().collect();
         let songs_iter = playlist.songs().iter().filter_map(|&id| self.library.get(id));
 
-        if terms.is_empty() {
+        if !is_filtering(&self.playlist_panel.search_query) {
             let songs: Vec<&Song> = songs_iter.collect();
             build_rows(songs, self.playlist_panel.category, self.playlist_panel.sort, self.library.root(), out);
         } else {
+            let query = self.playlist_panel.search_query.to_lowercase();
+            let terms: Vec<&str> = query.split_whitespace().collect();
             let songs = fuzzy_filter_and_sort(songs_iter, &terms);
             build_relevance_rows(songs, out);
         }

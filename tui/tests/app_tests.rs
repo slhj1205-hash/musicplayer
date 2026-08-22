@@ -251,6 +251,19 @@ fn search_query_filters_rows_and_clearing_restores_them() {
 }
 
 #[test]
+fn filtering_while_grouped_by_artist_still_shows_the_artist_on_each_row() {
+    let mut h = harness();
+    h.app.library_panel.category = Category::Artist;
+    h.app.library_panel.search_query = "azure".into();
+
+    assert!(header_names(&mut h.app).is_empty(), "search results have no headers to carry the artist");
+
+    let buf = render(&mut h.app, 120, 30);
+    let text = buffer_text(&buf);
+    assert!(text.contains("Alpha"), "the artist must appear on the row since no header shows it:\n{text}");
+}
+
+#[test]
 fn repeated_visible_rows_calls_are_stable_when_nothing_changed() {
     let mut h = harness();
     let first = song_titles(&mut h.app);

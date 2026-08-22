@@ -8,13 +8,13 @@ use ratatui::{
 };
 
 use crate::{
-    app::{App, PlaylistView},
+    app::{is_filtering, App, PlaylistView},
     theme,
 };
 
 use super::{
-    focus_style, label_for, plural, render_no_matches, render_song_list_panel, search_title, styled_list,
-    titled_block, titled_block_split, unfocused_style, viewport, PanelHeight,
+    filtered_label_for, focus_style, label_for, plural, render_no_matches, render_song_list_panel, search_title,
+    styled_list, titled_block, titled_block_split, unfocused_style, viewport, PanelHeight,
 };
 
 fn playlist_name_style() -> Style {
@@ -88,6 +88,7 @@ fn render_viewing(app: &mut App, id: PlaylistId, area: Rect, buf: &mut Buffer) {
 
     let category = app.playlist_panel.category;
     let sort = app.playlist_panel.sort;
+    let filtering = is_filtering(&app.playlist_panel.search_query);
     let PanelHeight(height) = render_song_list_panel(
         area,
         buf,
@@ -95,7 +96,7 @@ fn render_viewing(app: &mut App, id: PlaylistId, area: Rect, buf: &mut Buffer) {
         rows,
         current,
         &app.library,
-        |song| label_for(song, category, sort),
+        |song| if filtering { filtered_label_for(song, sort) } else { label_for(song, category, sort) },
         &name,
         app.playlist_panel.category.label(),
         app.playlist_panel.sort.label(),

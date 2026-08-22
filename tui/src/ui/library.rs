@@ -1,9 +1,9 @@
 use lyre_core::SongId;
 use ratatui::{buffer::Buffer, layout::Rect};
 
-use crate::app::App;
+use crate::app::{is_filtering, App};
 
-use super::{label_for, render_song_list_panel, PanelHeight};
+use super::{filtered_label_for, label_for, render_song_list_panel, PanelHeight};
 
 pub fn render(app: &mut App, area: Rect, buf: &mut Buffer) {
     let current = app.queue.current_id();
@@ -13,6 +13,7 @@ pub fn render(app: &mut App, area: Rect, buf: &mut Buffer) {
 
     let category = app.library_panel.category;
     let sort = app.library_panel.sort;
+    let filtering = is_filtering(&app.library_panel.search_query);
     let playlist_mode = app.library_panel.playlist_mode;
     let playlists = &app.playlists;
 
@@ -31,7 +32,7 @@ pub fn render(app: &mut App, area: Rect, buf: &mut Buffer) {
         rows,
         current,
         &app.library,
-        |song| label_for(song, category, sort),
+        |song| if filtering { filtered_label_for(song, sort) } else { label_for(song, category, sort) },
         "Library",
         app.library_panel.category.label(),
         app.library_panel.sort.label(),

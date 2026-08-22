@@ -23,10 +23,10 @@ use crate::Backend;
 pub use row_builder::RowCache;
 pub use youtube::{start_youtube_fields, DownloadEvent};
 pub use state::{
-    Category, ChooseActionField, DirScanState, DownloadStatus, FetchStatus, LibraryPanelState, MetadataEditModal,
-    MetadataField, ModalState, Panel, PlaylistDisplayMode, PlaylistPanelState, PlaylistView, QueueSource,
-    RomanizedArtistConfirmModal, Row, SidePanel, Sort, SongModal, StatusKind, StatusMessage, YoutubeField,
-    YoutubeFieldsModal, YoutubeModal,
+    is_filtering, Category, ChooseActionField, DirScanState, DownloadStatus, FetchStatus, LibraryPanelState,
+    MetadataEditModal, MetadataField, ModalState, Panel, PlaylistDisplayMode, PlaylistPanelState, PlaylistView,
+    QueueSource, RomanizedArtistConfirmModal, Row, SidePanel, Sort, SongModal, StatusKind, StatusMessage,
+    YoutubeField, YoutubeFieldsModal, YoutubeModal,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

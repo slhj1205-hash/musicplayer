@@ -110,6 +110,10 @@ impl Sort {
     }
 }
 
+pub fn is_filtering(query: &str) -> bool {
+    query.split_whitespace().next().is_some()
+}
+
 pub(crate) fn cycle<T: Copy + PartialEq>(all: &[T], current: T, delta: isize) -> T {
     let len = all.len() as isize;
     let idx = all.iter().position(|x| *x == current).unwrap_or(0) as isize;

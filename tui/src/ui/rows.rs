@@ -82,6 +82,18 @@ pub fn label_for(song: &Song, category: crate::app::Category, sort: crate::app::
     SongLabel { title: song.title(), artist, detail }
 }
 
+pub fn filtered_label_for(song: &Song, sort: crate::app::Sort) -> SongLabel<'_> {
+    use crate::app::Sort;
+
+    let detail = match sort {
+        Sort::Duration => Some(super::format_duration(song.metadata().duration)),
+        Sort::DateModified => Some(super::format_mtime(song.modified())),
+        Sort::Title | Sort::Artist | Sort::Path => None,
+    };
+
+    SongLabel { title: song.title(), artist: Some(song.artist()), detail }
+}
+
 fn playlist_suffix(names: &[String], mode: PlaylistDisplayMode, available: usize) -> Option<String> {
     if names.is_empty() {
         return None;
