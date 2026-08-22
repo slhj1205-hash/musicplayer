@@ -57,6 +57,7 @@ pub struct Binding {
 
 const NONE: KeyModifiers = KeyModifiers::NONE;
 const CTRL: KeyModifiers = KeyModifiers::CONTROL;
+const ALT: KeyModifiers = KeyModifiers::ALT;
 
 pub const BINDINGS: &[Binding] = &[
     Binding { keys: &[(KeyCode::Tab, NONE)], action: Action::TogglePanel,
@@ -93,16 +94,16 @@ pub const BINDINGS: &[Binding] = &[
         display: "<u>", desc: "Un-shuffle", section: Section::Global, dispatch: true },
     Binding { keys: &[(KeyCode::Char('['), NONE), (KeyCode::Char('-'), NONE)], action: Action::VolumeDown,
         display: "<[>/<->", desc: "Volume down / up", section: Section::Global, dispatch: true },
-    Binding { keys: &[(KeyCode::Char(']'), NONE), (KeyCode::Char('+'), NONE)], action: Action::VolumeUp,
-        display: "<]>/<+>", desc: "Volume down / up", section: Section::Global, dispatch: true },
-    Binding { keys: &[(KeyCode::Char('A'), NONE)], action: Action::OpenSongModal,
-        display: "<Shift+A>", desc: "Song actions: add to / create playlist", section: Section::Global, dispatch: true },
+    Binding { keys: &[(KeyCode::Char(']'), NONE), (KeyCode::Char('='), NONE)], action: Action::VolumeUp,
+        display: "<]>/<=>", desc: "Volume down / up", section: Section::Global, dispatch: true },
+    Binding { keys: &[(KeyCode::Char('w'), NONE)], action: Action::OpenSongModal,
+        display: "<w>", desc: "Song actions: add to / create playlist", section: Section::Global, dispatch: true },
     Binding { keys: &[(KeyCode::Char('E'), NONE)], action: Action::OpenMetadataEditModal,
         display: "<Shift+E>", desc: "Edit song metadata (title/artist/album/genre/track/date)", section: Section::Global, dispatch: true },
     Binding { keys: &[(KeyCode::Char('y'), NONE)], action: Action::OpenYoutubeModal,
         display: "<y>", desc: "Download audio from a YouTube URL", section: Section::Global, dispatch: true },
-    Binding { keys: &[(KeyCode::Char('d'), NONE)], action: Action::ChangeDirectory,
-        display: "<d>", desc: "Change directory (used by both Library and Playlists)", section: Section::Global, dispatch: true },
+    Binding { keys: &[(KeyCode::Char('d'), ALT)], action: Action::ChangeDirectory,
+        display: "<Alt+d>", desc: "Change directory (used by both Library and Playlists)", section: Section::Global, dispatch: true },
     Binding { keys: &[(KeyCode::Char('q'), NONE)], action: Action::Quit,
         display: "<q>", desc: "Quit (with confirmation)", section: Section::Global, dispatch: true },
     Binding { keys: &[], action: Action::None,

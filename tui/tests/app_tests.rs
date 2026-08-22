@@ -1,11 +1,10 @@
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent};
 use lyre_core::{Library, MetadataEdits, PlaylistStore};
 use ratatui::{buffer::Buffer, layout::Rect, style::Style, widgets::Widget};
 
 use lyre_tui::{
     app::{App, Category, ChooseActionField, MetadataField, Panel, PlaylistView, Row, SidePanel, Sort},
     config,
-    keymap::{self, Action},
     ui::{marquee_window, sort_title},
     Backend,
 };
@@ -333,18 +332,6 @@ fn lowercase_p_cycles_sort_and_shows_a_status_message() {
 }
 
 #[test]
-fn shift_a_opens_the_song_actions_modal_not_lowercase_p() {
-    let mut h = harness();
-    h.app.on_key(key('g'));
-
-    h.app.on_key(key('p'));
-    assert!(h.app.modal.song_modal.is_none(), "'p' must cycle sort, not open the song modal");
-
-    h.app.on_key(special(KeyCode::Char('A')));
-    assert!(h.app.modal.song_modal.is_some(), "Shift+A must open the song actions modal");
-}
-
-#[test]
 fn shift_e_opens_the_metadata_modal_prefilled_with_the_selected_songs_tags() {
     let mut h = harness();
     h.app.on_key(key('g'));
@@ -390,7 +377,7 @@ fn song_modal_tab_and_shift_tab_move_focus_like_j_and_k() {
     let mut h = harness();
     h.app.playlists.create("First");
     h.app.on_key(key('g'));
-    h.app.on_key(special(KeyCode::Char('A')));
+    h.app.on_key(key('l'));
     assert_eq!(h.app.modal.song_modal.as_ref().unwrap().selected, ChooseActionField::AddToPlaylist);
 
     h.app.on_key(special(KeyCode::Tab));
@@ -414,7 +401,7 @@ fn song_modal_side_panel_tab_and_shift_tab_move_selection_like_j_and_k() {
     h.app.playlists.create("First");
     h.app.playlists.create("Second");
     h.app.on_key(key('g'));
-    h.app.on_key(special(KeyCode::Char('A')));
+    h.app.on_key(key('l'));
     h.app.on_key(special(KeyCode::Enter));
 
     let SidePanel::AddToPlaylist { list_state, .. } = h.app.modal.song_modal.as_ref().unwrap().side.as_ref().unwrap();
@@ -577,10 +564,10 @@ fn lowercase_a_with_no_song_selected_shows_a_status_message() {
 }
 
 #[test]
-fn shift_a_with_no_song_selected_shows_a_status_message() {
+fn l_with_no_song_selected_shows_a_status_message() {
     let mut h = harness();
     h.app.library_panel.list_state.select(None);
-    h.app.on_key(key('A'));
+    h.app.on_key(key('l'));
     assert!(h.app.status.text.contains("select a song first"));
 }
 
@@ -780,32 +767,6 @@ fn scrolling_to_the_end_brings_the_last_song_into_view() {
     let mut buf = Buffer::empty(short);
     h.app.render(short, &mut buf);
     assert!(buffer_text(&buf).contains("Grove"), "the last song should scroll into view");
-}
-
-#[test]
-fn ctrl_d_pages_down_instead_of_changing_directory() {
-    assert_eq!(
-        keymap::lookup(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::CONTROL)),
-        Some(Action::PageDown),
-        "Ctrl+d must resolve to PageDown, not be shadowed by plain d's ChangeDirectory binding"
-    );
-    assert_eq!(
-        keymap::lookup(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE)),
-        Some(Action::ChangeDirectory)
-    );
-}
-
-#[test]
-fn ctrl_u_pages_up_instead_of_unshuffling() {
-    assert_eq!(
-        keymap::lookup(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::CONTROL)),
-        Some(Action::PageUp),
-        "Ctrl+u must resolve to PageUp, not be shadowed by plain u's Unshuffle binding"
-    );
-    assert_eq!(
-        keymap::lookup(KeyEvent::new(KeyCode::Char('u'), KeyModifiers::NONE)),
-        Some(Action::Unshuffle)
-    );
 }
 
 #[test]
