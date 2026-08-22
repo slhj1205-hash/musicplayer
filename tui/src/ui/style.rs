@@ -180,10 +180,11 @@ pub fn marquee_window(text: &str, visible_width: usize) -> Cow<'_, str> {
         return Cow::Borrowed("");
     }
 
-    let chars: Vec<char> = text.chars().collect();
     if display_width(text) <= visible_width {
         return Cow::Borrowed(text);
     }
+
+    let chars: Vec<char> = text.chars().collect();
 
     MARQUEE_ACTIVE.with(|c| c.set(true));
 

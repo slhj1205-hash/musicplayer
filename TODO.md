@@ -136,6 +136,77 @@ it would be enum-for-enum's-sake. `PlaylistStore`'s five mutators should
 be treated as one shared type regardless of which option is picked —
 they're the same concept repeated five times, not five different ones.
 
+# Performance pass (2026-08-22)
+
+A pass over both crates against `CLAUDE.md`'s "Performance targets" section.
+Most of the codebase already follows that advice correctly (`RowCache`,
+viewport-only row rendering, no premature indexing in `core`). Two small
+fixes with no added complexity were applied directly; one candidate was
+deliberately left for a decision instead of just being done.
+
+## Fixed already
+
+- [x] **`marquee_window` allocated a `Vec<char>` before checking whether it
+  was needed** (`tui/src/ui/style.rs`). The char collection ran
+  unconditionally, even on the common path where the text already fits
+  `visible_width` and returns early without ever touching `chars`. Since
+  this runs per visible row, per frame, for title/artist/playlist-suffix
+  text, every row that already fit its column was paying for a discarded
+  allocation. Moved the collection to after the early-return check — pure
+  reordering, no output change. Covered by the existing
+  `marquee_window_returns_short_ascii_text_unchanged`,
+  `marquee_window_never_exceeds_the_visible_width_for_wide_characters`, and
+  `marquee_window_zero_width_returns_empty` tests.
+
+- [x] **`PlaylistStore::reindex` sorted with `sort_by_key` on an allocating
+  key** (`core/src/playlist.rs`). `sort_by_key`'s key closure isn't
+  guaranteed to run once per element (unlike `sort_by_cached_key`), so
+  `.to_lowercase()` could allocate more than once per playlist during a
+  sort. Switched to `sort_by_cached_key` — identical ordering, guaranteed
+  one call per element. Covered by
+  `playlist_store_ids_sorted_by_name_are_case_insensitive`.
+
+## Deferred — needs a decision before starting
+
+- [ ] **Cache char lengths on `SortKeys` instead of recomputing them in
+  `fuzzy_term_score`** (`core/src/song.rs`). `fuzzy_term_score` calls
+  `.chars().count()` on the title/artist/album/title_sort/artist_sort
+  fields every time it runs — i.e. per search term, per song, on every
+  keystroke of a fuzzy search. That count is static per song and could be
+  computed once when `SortKeys::build` runs instead of on every query.
+
+  **Why this isn't just done:** `CLAUDE.md`'s "Performance targets" section
+  calls out this exact code path by name — "Fuzzy search re-scores every
+  song on each keystroke ... don't add caching/debouncing for it unless a
+  profile actually shows it's a problem" — and separately: "If a 'faster'
+  approach would add real complexity, it's very likely not worth it at
+  this scale — check with the user before introducing it." This change
+  would add 5 `usize` fields to `SortKeys` (≈40 bytes × up to 10k songs ≈
+  400KB) to speed up a pass the project has already decided is fast
+  enough. The saving is real, but it's exactly the kind of thing the doc
+  says to ask about first rather than bundle in as an obvious win.
+
+  **Plan if approved:**
+  1. Add `title_len: usize`, `artist_len: usize`, `album_len: usize`,
+     `title_sort_len: usize`, `artist_sort_len: usize` to `SortKeys`.
+  2. In `SortKeys::build`, compute each as `.chars().count()` on the
+     already-lowercased `Box<str>` / `Option<Box<str>>` right after
+     constructing it — this yields the identical value
+     `field.chars().count()` produces today at query time, since the
+     lowercasing that can expand some characters has already happened by
+     then.
+  3. Add `title_len()`, `artist_len()`, `album_len()`, `title_sort_len()`,
+     `artist_sort_len()` accessors next to the existing `title()` /
+     `artist()` / etc.
+  4. In `Song::fuzzy_term_score`, replace each `<field>.chars().count()`
+     call with `self.keys.<field>_len()`.
+  5. Verify with `cargo test -p lyre-core`, in particular
+     `song_fuzzy_term_score_*` and
+     `fuzzy_normalize_by_length_scores_shorter_fields_higher_for_the_same_raw_score`
+     — the numeric input to `normalize_by_length` is unchanged, just
+     computed once instead of per call, so scores should be bit-for-bit
+     identical before and after.
+
 # YouTube (yt-dlp) download integration — plan (2026-08-20, revised 2026-08-20)
 
 Not started. Lets the user paste a YouTube URL, confirm it resolved to the

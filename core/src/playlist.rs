@@ -293,7 +293,7 @@ impl PlaylistStore {
     fn reindex(&mut self) {
         self.sorted_ids.clear();
         self.sorted_ids.extend(self.playlists.keys().copied());
-        self.sorted_ids.sort_by_key(|id| (self.playlists[id].name().to_lowercase(), *id));
+        self.sorted_ids.sort_by_cached_key(|id| (self.playlists[id].name().to_lowercase(), *id));
 
         self.membership.clear();
         for id in &self.sorted_ids {
