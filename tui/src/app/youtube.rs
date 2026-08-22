@@ -26,6 +26,10 @@ impl App {
         self.handle_youtube_event(event);
     }
 
+    pub fn drain_youtube_events_for_test(&mut self) -> bool {
+        self.drain_youtube_events()
+    }
+
     pub(super) fn drain_youtube_events(&mut self) -> bool {
         let mut changed = false;
         while let Ok(event) = self.youtube_rx.try_recv() {
@@ -271,6 +275,7 @@ impl App {
         }
     }
 
+    #[cfg(feature = "youtube")]
     fn spawn_fetch_and_download(&self, url: String) {
         let tx = self.youtube_tx.clone();
         std::thread::spawn(move || {
@@ -294,6 +299,13 @@ impl App {
                 }
             }
         });
+    }
+
+    #[cfg(not(feature = "youtube"))]
+    fn spawn_fetch_and_download(&self, _url: String) {
+        let _ = self
+            .youtube_tx
+            .send(DownloadEvent::Failed("YouTube support was not built into this binary".to_string()));
     }
 }
 

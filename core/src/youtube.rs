@@ -1,16 +1,22 @@
-use std::{fs, path::{Path, PathBuf}, time::Duration};
+use std::{fs, path::Path};
 
+#[cfg(feature = "youtube")]
+use std::{path::PathBuf, time::Duration};
+
+#[cfg(feature = "youtube")]
 use yt_dlp::{
     download::config::postprocess::{AudioCodec, PostProcessConfig},
     Downloader,
 };
 
+#[cfg(feature = "youtube")]
 pub struct VideoInfo {
     pub title: String,
     pub uploader: Option<String>,
     pub duration: Option<Duration>,
 }
 
+#[cfg(feature = "youtube")]
 pub fn fetch_and_download(
     url: &str,
     binaries_dir: &Path,
@@ -86,6 +92,7 @@ pub fn discard_temp_file(path: &Path) {
     let _ = fs::remove_file(path);
 }
 
+#[cfg(feature = "youtube")]
 async fn build_downloader(binaries_dir: &Path) -> Result<Downloader, Error> {
     Downloader::with_new_binaries(binaries_dir, binaries_dir)
         .await
@@ -95,6 +102,7 @@ async fn build_downloader(binaries_dir: &Path) -> Result<Downloader, Error> {
         .map_err(Error::YtDlp)
 }
 
+#[cfg(feature = "youtube")]
 fn run<F, T>(future: F) -> Result<T, Error>
 where
     F: std::future::Future<Output = Result<T, Error>>,
@@ -129,14 +137,18 @@ fn capitalize_and_strip(word: &str) -> String {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[cfg(feature = "youtube")]
     #[error("this video is a live stream and cannot be downloaded")]
     Live,
+    #[cfg(feature = "youtube")]
     #[error("failed to create a temporary file for the download")]
     Temp(#[source] std::io::Error),
+    #[cfg(feature = "youtube")]
     #[error("failed to start the download runtime")]
     Runtime(#[source] std::io::Error),
     #[error("failed to move the downloaded file into place")]
     Finalize(#[source] std::io::Error),
+    #[cfg(feature = "youtube")]
     #[error(transparent)]
     YtDlp(#[from] yt_dlp::error::Error),
 }

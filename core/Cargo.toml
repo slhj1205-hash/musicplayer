@@ -15,9 +15,16 @@ lofty.workspace = true
 thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-gstreamer.workspace = true
+gstreamer = { workspace = true, optional = true }
 fnv.workspace = true
-yt-dlp.workspace = true
-tokio.workspace = true
+yt-dlp = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
+
+[dev-dependencies]
 tempfile.workspace = true
 
+[features]
+default = ["youtube", "gstreamer"]
+youtube = ["dep:yt-dlp", "dep:tokio", "dep:tempfile"]
+gstreamer = ["dep:gstreamer"]

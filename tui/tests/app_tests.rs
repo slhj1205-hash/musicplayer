@@ -842,6 +842,27 @@ fn lowercase_y_opens_the_youtube_modal_entering_url() {
     assert!(matches!(modal, lyre_tui::app::YoutubeModal::EnteringUrl { url_input, error, restore } if url_input.is_empty() && error.is_none() && restore.is_none()));
 }
 
+#[cfg(not(feature = "youtube"))]
+#[test]
+fn without_the_youtube_feature_submitting_a_url_fails_gracefully_instead_of_hanging() {
+    let mut h = harness();
+    h.app.on_key(key('y'));
+    for c in "https://example.com/watch?v=x".chars() {
+        h.app.on_key(key(c));
+    }
+    h.app.on_key(special(KeyCode::Enter));
+
+    assert!(h.app.drain_youtube_events_for_test(), "the stub must report an event, not silently do nothing");
+
+    match h.app.modal.youtube_modal.as_ref().expect("a failure must not silently close the modal") {
+        lyre_tui::app::YoutubeModal::EnteringUrl { url_input, error, .. } => {
+            assert_eq!(url_input, "https://example.com/watch?v=x");
+            assert_eq!(error.as_deref(), Some("YouTube support was not built into this binary"));
+        }
+        _ => panic!("a failure must bounce the user back to the URL screen"),
+    }
+}
+
 #[test]
 fn youtube_modal_entering_url_accumulates_typed_characters_and_esc_cancels() {
     let mut h = harness();

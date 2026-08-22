@@ -1,5 +1,6 @@
 pub mod atomic;
 pub mod fuzzy;
+#[cfg(feature = "gstreamer")]
 pub mod gst;
 pub mod library;
 pub mod player;

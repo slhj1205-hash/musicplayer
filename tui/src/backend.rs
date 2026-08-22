@@ -1,13 +1,15 @@
 
 use std::time::Duration;
 
+#[cfg(feature = "gstreamer")]
+use lyre_core::gst::GstBackend;
 use lyre_core::{
-    gst::GstBackend,
     player::{AudioBackend, BackendError, BackendEvent},
     NullBackend,
 };
 
 pub enum Backend {
+    #[cfg(feature = "gstreamer")]
     Gst(Box<GstBackend>),
     Null(NullBackend),
 }
@@ -15,13 +17,19 @@ pub enum Backend {
 impl Backend {
 
     pub fn detect() -> Backend {
-        match GstBackend::new() {
-            Ok(backend) => Backend::Gst(Box::new(backend)),
-            Err(e) => {
-                eprintln!("warning: no audio backend available ({e}); starting in silent mode");
-                Backend::Null(NullBackend::new())
+        #[cfg(feature = "gstreamer")]
+        {
+            match GstBackend::new() {
+                Ok(backend) => return Backend::Gst(Box::new(backend)),
+                Err(e) => {
+                    eprintln!("warning: no audio backend available ({e}); starting in silent mode");
+                }
             }
         }
+        #[cfg(not(feature = "gstreamer"))]
+        eprintln!("warning: gstreamer support was not built into this binary; starting in silent mode");
+
+        Backend::Null(NullBackend::new())
     }
 
     pub fn null() -> Backend {
@@ -36,6 +44,7 @@ impl Backend {
 macro_rules! dispatch {
     ($self:ident, $inner:ident => $call:expr) => {
         match $self {
+            #[cfg(feature = "gstreamer")]
             Backend::Gst($inner) => $call,
             Backend::Null($inner) => $call,
         }

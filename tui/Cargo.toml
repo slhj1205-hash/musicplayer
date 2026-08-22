@@ -8,7 +8,7 @@ name = "lyre_tui"
 path = "src/lib.rs"
 
 [dependencies]
-lyre-core = { path = "../core" }
+lyre-core = { path = "../core", default-features = false }
 fnv.workspace = true
 unicode-width.workspace = true
 serde.workspace = true
@@ -19,3 +19,8 @@ color-eyre.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[features]
+default = ["youtube", "gstreamer"]
+youtube = ["lyre-core/youtube"]
+gstreamer = ["lyre-core/gstreamer"]

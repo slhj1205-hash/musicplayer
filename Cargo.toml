@@ -12,10 +12,15 @@ name = "lyre"
 path = "src/main.rs"
 
 [dependencies]
-lyre-core = { path = "core" }
-lyre-tui = { path = "tui" }
+lyre-core = { path = "core", default-features = false }
+lyre-tui = { path = "tui", default-features = false }
 color-eyre.workspace = true
 ratatui.workspace = true
+
+[features]
+default = ["youtube", "gstreamer"]
+youtube = ["lyre-tui/youtube", "lyre-core/youtube"]
+gstreamer = ["lyre-tui/gstreamer", "lyre-core/gstreamer"]
 
 [workspace.package]
 version = "0.1.0"
