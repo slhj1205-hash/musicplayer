@@ -9,7 +9,7 @@ use lyre_core::{
     library::{InsertOutcome, Library},
     needs_romanization,
     player::{AudioBackend, PlaybackState},
-    playlist::PlaylistStore,
+    playlist::{Mutated, PlaylistStore},
     queue::Queue,
     scan_cache::{Entry, Probed, ScanCache},
     song::{is_supported_audio, Metadata, MetadataEdits, Song, SongId},
@@ -243,7 +243,7 @@ fn library_update_metadata_ripples_the_new_song_id_into_playlists_and_persists()
     edits.title = "Song (Remaster)".to_string();
     let new_id = library.update_metadata(old_id, &edits).unwrap();
 
-    assert!(store.rename_song_id(old_id, new_id));
+    assert_eq!(store.rename_song_id(old_id, new_id), Mutated::Yes);
     assert_eq!(store.get(playlist_id).unwrap().songs(), &[new_id]);
     assert!(store.containing(new_id).contains(&playlist_id));
     assert!(store.containing(old_id).is_empty());
@@ -301,10 +301,10 @@ fn playlist_store_create_rename_and_delete_round_trip() {
     let id = store.create("Road Trip");
     assert_eq!(store.get(id).unwrap().name(), "Road Trip");
 
-    assert!(store.rename(id, "Summer Trip"));
+    assert_eq!(store.rename(id, "Summer Trip"), Mutated::Yes);
     assert_eq!(store.get(id).unwrap().name(), "Summer Trip");
 
-    assert!(store.delete(id));
+    assert_eq!(store.delete(id), Mutated::Yes);
     assert!(store.get(id).is_none());
 }
 
@@ -356,8 +356,8 @@ fn playlist_store_add_song_is_idempotent() {
     let id = store.create("Mix");
     let song = SongId::compute(Path::new("song.mp3"), 1, 1);
 
-    assert!(store.add_song(id, song));
-    assert!(!store.add_song(id, song), "adding the same song twice should be a no-op");
+    assert_eq!(store.add_song(id, song), Mutated::Yes);
+    assert_eq!(store.add_song(id, song), Mutated::No, "adding the same song twice should be a no-op");
     assert_eq!(store.get(id).unwrap().len(), 1);
 }
 
@@ -370,7 +370,7 @@ fn playlist_store_remove_song_updates_membership() {
     store.add_song(id, song);
 
     assert!(store.contains(id, song));
-    assert!(store.remove_song(id, song));
+    assert_eq!(store.remove_song(id, song), Mutated::Yes);
     assert!(!store.contains(id, song));
     assert!(store.containing(song).is_empty());
 }

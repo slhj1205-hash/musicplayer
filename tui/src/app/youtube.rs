@@ -9,7 +9,7 @@ use lyre_core::{youtube, InsertOutcome, MetadataEdits, Metadata, Song};
 
 use super::state::{DownloadStatus, FetchStatus, YoutubeField, YoutubeFieldsModal, YoutubeModal};
 use super::state::StatusKind;
-use super::App;
+use super::{App, EventsChanged};
 
 pub enum DownloadEvent {
     InfoReady { title: String, uploader: Option<String> },
@@ -26,14 +26,14 @@ impl App {
         self.handle_youtube_event(event);
     }
 
-    pub fn drain_youtube_events_for_test(&mut self) -> bool {
+    pub fn drain_youtube_events_for_test(&mut self) -> EventsChanged {
         self.drain_youtube_events()
     }
 
-    pub(super) fn drain_youtube_events(&mut self) -> bool {
-        let mut changed = false;
+    pub(super) fn drain_youtube_events(&mut self) -> EventsChanged {
+        let mut changed = EventsChanged::Unchanged;
         while let Ok(event) = self.youtube_rx.try_recv() {
-            changed = true;
+            changed = EventsChanged::Changed;
             self.handle_youtube_event(event);
         }
         changed

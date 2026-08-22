@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent};
 
-use lyre_core::SongId;
+use lyre_core::{Mutated, SongId};
 
 use crate::keymap::{self, Action, Direction};
 
@@ -173,7 +173,7 @@ impl App {
         }
 
         let label = self.library.get(song_id).map(|s| s.to_string()).unwrap_or_else(|| "song".to_string());
-        if self.playlists.remove_song(playlist_id, song_id) {
+        if self.playlists.remove_song(playlist_id, song_id) == Mutated::Yes {
             self.set_status(format!("removed {label}"), StatusKind::Success);
             self.sync_selection_to_rows();
         } else {
@@ -332,7 +332,7 @@ impl App {
             KeyCode::Enter => {
                 if let Some(&target) = list_state.selected().and_then(|i| options.get(i)) {
                     let name = self.playlists.get(target).map(|p| p.name().to_string()).unwrap_or_default();
-                    if self.playlists.add_song(target, song) {
+                    if self.playlists.add_song(target, song) == Mutated::Yes {
                         self.set_status(format!("added to \"{name}\""), StatusKind::Success);
                     } else {
                         self.set_status(format!("already in \"{name}\""), StatusKind::Info);

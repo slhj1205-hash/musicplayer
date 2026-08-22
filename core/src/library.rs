@@ -76,7 +76,7 @@ impl Library {
                     next_cache.insert(relative, Entry { size, mtime, probed: Probed::Tags(metadata.clone()) });
 
                     let song = Song::from_cached_with_stat(path, size, mtime, metadata);
-                    if let Some(id) = insert_song(&mut songs, song, &mut stats.skipped_files) {
+                    if let ScanInsert::Inserted(id) = insert_song(&mut songs, song, &mut stats.skipped_files) {
                         by_path.push(id);
                     }
                 }
@@ -327,7 +327,13 @@ fn probe_file(path: &Path, root: &Path, cache: &ScanCache) -> Outcome {
     }
 }
 
-fn insert_song(songs: &mut HashMap<SongId, Song>, song: Song, skipped: &mut usize) -> Option<SongId> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScanInsert {
+    Inserted(SongId),
+    Skipped,
+}
+
+fn insert_song(songs: &mut HashMap<SongId, Song>, song: Song, skipped: &mut usize) -> ScanInsert {
     if let Some(existing) = songs.get(&song.id()) {
         if existing.path() != song.path() {
             eprintln!(
@@ -337,11 +343,11 @@ fn insert_song(songs: &mut HashMap<SongId, Song>, song: Song, skipped: &mut usiz
             );
             *skipped += 1;
         }
-        return None;
+        return ScanInsert::Skipped;
     }
     let id = song.id();
     songs.insert(id, song);
-    Some(id)
+    ScanInsert::Inserted(id)
 }
 
 #[derive(Debug, thiserror::Error)]

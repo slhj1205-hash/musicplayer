@@ -852,7 +852,11 @@ fn without_the_youtube_feature_submitting_a_url_fails_gracefully_instead_of_hang
     }
     h.app.on_key(special(KeyCode::Enter));
 
-    assert!(h.app.drain_youtube_events_for_test(), "the stub must report an event, not silently do nothing");
+    assert_eq!(
+        h.app.drain_youtube_events_for_test(),
+        lyre_tui::app::EventsChanged::Changed,
+        "the stub must report an event, not silently do nothing"
+    );
 
     match h.app.modal.youtube_modal.as_ref().expect("a failure must not silently close the modal") {
         lyre_tui::app::YoutubeModal::EnteringUrl { url_input, error, .. } => {

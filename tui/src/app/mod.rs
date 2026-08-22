@@ -29,6 +29,12 @@ pub use state::{
     YoutubeFieldsModal, YoutubeModal,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventsChanged {
+    Changed,
+    Unchanged,
+}
+
 pub struct App {
     pub library: Library,
     pub queue: Queue,
@@ -125,11 +131,11 @@ impl App {
                 needs_redraw = true;
             }
 
-            if self.drain_player_events() {
+            if self.drain_player_events() == EventsChanged::Changed {
                 needs_redraw = true;
             }
 
-            if self.drain_youtube_events() {
+            if self.drain_youtube_events() == EventsChanged::Changed {
                 needs_redraw = true;
             }
         }

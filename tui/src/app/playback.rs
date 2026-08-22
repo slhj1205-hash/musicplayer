@@ -3,13 +3,13 @@ use ratatui::widgets::ListState;
 use lyre_core::{player::PlayerEvent, PlaylistId, Queue, SongId};
 
 use super::state::{heading_selected_message, Panel, PlaylistView, QueueSource, Row, StatusKind};
-use super::App;
+use super::{App, EventsChanged};
 
 impl App {
 
-    pub(super) fn drain_player_events(&mut self) -> bool {
+    pub(super) fn drain_player_events(&mut self) -> EventsChanged {
         let events = self.player.poll_events();
-        let changed = !events.is_empty();
+        let changed = if events.is_empty() { EventsChanged::Unchanged } else { EventsChanged::Changed };
         for event in events {
             match event {
                 PlayerEvent::SongEnded => self.advance(),

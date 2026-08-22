@@ -7,6 +7,12 @@ use crate::keymap::Direction;
 use super::state::{Panel, PlaylistView, QueueSource, Row, StatusKind};
 use super::App;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Selected {
+    Found,
+    NotFound,
+}
+
 impl App {
     pub fn queue_source(&self) -> QueueSource {
         self.queue_source
@@ -183,7 +189,7 @@ impl App {
             return;
         };
 
-        if !self.select_song_by_id(current) {
+        if self.select_song_by_id(current) == Selected::NotFound {
             self.set_status(
                 "now playing isn't in the current view -- clear the search to find it",
                 StatusKind::Info,
@@ -191,13 +197,13 @@ impl App {
         }
     }
 
-    pub(super) fn select_song_by_id(&mut self, id: SongId) -> bool {
+    pub(super) fn select_song_by_id(&mut self, id: SongId) -> Selected {
         match self.visible_rows().iter().position(|row| matches!(row, Row::Song(row_id, _) if *row_id == id)) {
             Some(i) => {
                 self.active_list_state_mut().select(Some(i));
-                true
+                Selected::Found
             }
-            None => false,
+            None => Selected::NotFound,
         }
     }
 

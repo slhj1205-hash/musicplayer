@@ -113,6 +113,12 @@ pub struct PruneStats {
 
 const FLUSH_AFTER: Duration = Duration::from_millis(750);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mutated {
+    Yes,
+    No,
+}
+
 pub struct PlaylistStore {
     path: PathBuf,
     playlists: HashMap<PlaylistId, Playlist>,
@@ -216,19 +222,19 @@ impl PlaylistStore {
         id
     }
 
-    pub fn rename(&mut self, id: PlaylistId, name: impl Into<String>) -> bool {
+    pub fn rename(&mut self, id: PlaylistId, name: impl Into<String>) -> Mutated {
         let Some(playlist) = self.playlists.get_mut(&id) else {
-            return false;
+            return Mutated::No;
         };
         playlist.rename(name);
         self.reindex();
         self.mark_dirty();
-        true
+        Mutated::Yes
     }
 
-    pub fn add_song(&mut self, id: PlaylistId, song: SongId) -> bool {
+    pub fn add_song(&mut self, id: PlaylistId, song: SongId) -> Mutated {
         if !self.playlists.contains_key(&id) || self.contains(id, song) {
-            return false;
+            return Mutated::No;
         }
 
         self.playlists.get_mut(&id).expect("checked above").add(song);
@@ -236,17 +242,17 @@ impl PlaylistStore {
 
         self.revision += 1;
         self.mark_dirty();
-        true
+        Mutated::Yes
     }
 
-    pub fn remove_song(&mut self, id: PlaylistId, song: SongId) -> bool {
+    pub fn remove_song(&mut self, id: PlaylistId, song: SongId) -> Mutated {
         let Some(playlist) = self.playlists.get_mut(&id) else {
-            return false;
+            return Mutated::No;
         };
         let before = playlist.len();
         playlist.remove_all(song);
         if playlist.len() == before {
-            return false;
+            return Mutated::No;
         }
 
         if let Some(entry) = self.membership.get_mut(&song) {
@@ -258,12 +264,12 @@ impl PlaylistStore {
 
         self.revision += 1;
         self.mark_dirty();
-        true
+        Mutated::Yes
     }
 
-    pub fn rename_song_id(&mut self, old: SongId, new: SongId) -> bool {
+    pub fn rename_song_id(&mut self, old: SongId, new: SongId) -> Mutated {
         if old == new || !self.membership.contains_key(&old) {
-            return false;
+            return Mutated::No;
         }
 
         for playlist in self.playlists.values_mut() {
@@ -272,16 +278,16 @@ impl PlaylistStore {
 
         self.reindex();
         self.save();
-        true
+        Mutated::Yes
     }
 
-    pub fn delete(&mut self, id: PlaylistId) -> bool {
+    pub fn delete(&mut self, id: PlaylistId) -> Mutated {
         if self.playlists.remove(&id).is_none() {
-            return false;
+            return Mutated::No;
         }
         self.reindex();
         self.mark_dirty();
-        true
+        Mutated::Yes
     }
 
     fn reindex(&mut self) {
