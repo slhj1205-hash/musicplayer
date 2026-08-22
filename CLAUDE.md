@@ -65,4 +65,6 @@ Tests live as integration-style suites in `core/tests/core_tests.rs` and `tui/te
 
 ## Delivering changes
 
+Before starting any work, `git pull` to make sure the local checkout is on the latest commit. Patches are generated as a diff against whatever HEAD happens to be checked out, so starting from a stale commit produces a patch full of unrelated context that won't apply cleanly to the user's actual repo state.
+
 When asked to implement something in this repo, verify the change compiles and `cargo test --workspace` passes before handing it back. Prefer producing a patch file (`git diff` output) the user can `git apply` over describing changes only in prose — that's been the working pattern in this project and it lets the user review and apply on their own machine.
